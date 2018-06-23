@@ -38,7 +38,7 @@ To do list:
 - Optimization of the code for multi-node queries, now the code select one network node to request all block data.
 - Standardize modular design of the code, add NPM installer.
 
-# update 2018-06-22
+### update 2018-06-22
 - deleted some files from dependency packages, that are not needed
 - removed dependency on bcoin library
 - detection of forks/orphans with an automatic recovery implemented
