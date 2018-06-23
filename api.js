@@ -285,22 +285,18 @@ function responseAPIrequest(res, commands) {
   nParams = commands.length;
   var command = (nParams == 0) ? 'help' : commands[0];
   var param = (nParams > 1) ? commands[1] : bestIndex;
-  if ((nParams == 0) || (param=='help')) {
-  }
-  else {
-    switch(command) {
-      case 'help':
-        showHelp(res);
-        break;
-      case 'getheight':
-        getHeight(res);
-        break;
-      case 'getblock':
-        getBlock(res, param);
-        break;
-      default:
-        res.end('{"error": "unknown request"}');
-    }
+  switch(command) {
+    case 'help':
+      showHelp(res);
+      break;
+    case 'getheight':
+      getHeight(res);
+      break;
+    case 'getblock':
+      getBlock(res, param);
+      break;
+    default:
+      res.end('{"error": "unknown request"}');
   }
 }
 
