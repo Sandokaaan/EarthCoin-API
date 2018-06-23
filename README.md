@@ -1,0 +1,1 @@
+# EarthCoin-API
