@@ -46,19 +46,26 @@ var Transaction = bitcore.Transaction;
 
 //////////////////////////////////////////////////////////////
 // set-up parameters for EarthCoin network                  //
+var fs=require('fs');
+var configFile="./config.json";
+var EACConfig=JSON.parse(fs.readFileSync(configFile));
+
 var Networks = require('bitcore-lib').Networks;
+
+var EACnetJson = EACConfig[0].EACnet;
+//console.log('EACnet.name:' + EACnetJson.name);
 var EACnet = {
-  name: 'earthcoin',
-  alias: 'eacnet',
-  pubkeyhash: 0x5d,
-  privatekey: 0xdd,
-  scripthash: 0x05,
-  xpubkey: 0x0488b21e,
-  xprivkey: 0x0488ade4,
-  networkMagic: 0xc0dbf1fd,
-  port: 35677,
-  dnsSeeds: []
-};
+  name: EACnetJson.name, 	 //'earthcoin',
+  alias: EACnetJson.alias, 	 //'eacnet',
+  pubkeyhash: conventToInt(EACnetJson.pubkeyhash), 	 //0x5d,
+  privatekey: conventToInt(EACnetJson.privatekey), 	 //0xdd,
+  scripthash: conventToInt(EACnetJson.scripthash), 	 //0x05,
+  xpubkey: conventToInt(EACnetJson.xpubkey),  	//0x0488b21e,
+  xprivkey: conventToInt(EACnetJson.xprivkey),  	//0x0488ade4,
+  networkMagic: conventToInt(EACnetJson.networkMagic),  	//0xc0dbf1fd,
+  port: EACnetJson.port, 	//35677,
+  dnsSeeds: EACnetJson.dnsSeeds	 //[]
+};  
 Networks.add(EACnet);
 var eac = Networks.get('earthcoin');
 Networks.defaultNetwork = eac;
@@ -140,6 +147,18 @@ function initChain() {
 }
 //////////////////////////////////////////////////////////////
 
+//////////////////////////////////////////////////////////////
+// a function for Sixteen decimal decimal system            //
+function conventToInt(str){
+	if (str.substring(0, 2) == "0x" || str.substring(0, 2) == "0X")
+	{
+		str=str.substring(2, str.length);
+	}
+	
+	var val = parseInt(str, 16);
+	return val;
+}
+//////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////
 // a function for a quick sync with the network             //
