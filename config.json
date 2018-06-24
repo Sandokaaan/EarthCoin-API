@@ -1,0 +1,18 @@
+[
+  { 
+	"EACnet": [
+		{
+		  "name": "earthcoin",
+		  "alias": "eacnet",
+		  "pubkeyhash": 0x5d,
+		  "privatekey": 0xdd,
+		  "scripthash": 0x05,
+		  "xpubkey": 0x0488b21e,
+		  "xprivkey": 0x0488ade4,
+		  "networkMagic": 0xc0dbf1fd,
+		  "port": 35677,
+		  "dnsSeeds": []
+		}
+	]	
+  }
+ ]
