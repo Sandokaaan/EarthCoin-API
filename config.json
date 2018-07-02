@@ -32,5 +32,6 @@
   "dbIP": "127.0.0.1",               /* IP address with Mongodb server, default localhost (127.0.0.1) */
   "dbPort": 27017,                   /* port number of Mongodb server, default 27017 */
   "dbName": "dbEarthCoin",           /* name of database*/
-  "dbTable": "blocks"                /* name of main table in the database */
+  "dbBlocks": "blocks",              /* name of main table in the database */
+  "dbLimit": 500                     /* protect against database DoS by quering a large wallet balance */
 }

@@ -13,16 +13,22 @@ console.log('config load from api');
 
 //////////////////////////////////////////////////////////////
 // inter-proccess comunication
+// a way to send some info to api proccess
 var bestIndex = 0;
 var ipc=require('node-ipc');
-ipc.config.id   = 'sandonodeapi';
+ipc.config.id = 'sandonodeapi';
 ipc.config.retry= 1500;
-ipc.serve( function() {
-  ipc.server.on('height', function(data,socket){
-    bestIndex = data;
+ipc.config.silent = true;
+function connectIPC() {
+  ipc.connectTo('sandonodesync', function() {
+    ipc.of.sandonodesync.on('height', function(data,socket) {
+      bestIndex = data;
+      console.log('got height ', bestIndex);
+    });
   });
-});
-ipc.server.start();
+}
+connectIPC();
+
 //////////////////////////////////////////////////////////////
 
 
@@ -38,7 +44,7 @@ var inputAddress = utils.inputAddress;
 //////////////////////////////////////////////////////////////
 // a simple database interface                              //
 var database =  require('./lib/database');
-var dbBlocks = CONFIG.dbTable;
+var dbBlocks = CONFIG.dbBlocks;
 //////////////////////////////////////////////////////////////
 
 
@@ -111,6 +117,10 @@ function responseAPIrequest(res, commands) {
     case 'balance':
       getBalance(res, param);
       break;
+    case 'utxo':
+    case 'unspent':
+      getUnspent(res, param);
+      break;
     default:
       res.end('{"error": "unknown request"}');
   }
@@ -128,7 +138,9 @@ function showHelp(res) {
       tx: "the same as txinfo",
       addressfirstseen: "return the time when ADDRESS appeared in the blockchain: http://url:port/addressfirstseen/ADDRESS",
       getbalance: "return balance of ADDRESS: http://url:port/getbalance/ADDRESS",
-      balance: "the same as getbalance"
+      balance: "the same as getbalance",
+      utxo: "return unspent balances of ADDRESS",
+      unspent: "the same as utxo"
     }
   };
   res.end(JSON.stringify(rts));
@@ -148,7 +160,7 @@ function getBlock(res, param) {
       showBlock(res, rts);
     });
   else
-    database.search(dbBlocks, {h: param}, function(rts) {
+    database.search(dbBlocks, {_id: param}, function(rts) {
       showBlock(res, rts);
     });
 }
@@ -166,9 +178,8 @@ function showBlock(res, rts) {
     res.end(JSON.stringify(response));
     return;
   }
-  var isCached = !(rts.d.hasOwnProperty('buffer'));
-  var block = (isCached) ? Block.fromBuffer(rts.d) : Block.fromBuffer(rts.d.buffer);
-  var size = (isCached) ? rts.d.length : rts.d.buffer.length;
+  var block = Block.fromBuffer(rts.d.buffer);
+  var size = rts.d.buffer.length;
   var header = block.header;
   var transactions = block.transactions;
   var txs = [];
@@ -197,8 +208,8 @@ function getTxInfo(res, param) {
     res.end('{"error": "unknown transaction requested"}');
     return;
   }
-  var query = '{ "t.'+param+'": { "$exists": true}}';
-  database.search(dbBlocks, JSON.parse(query), function(rts) {
+  var query = { t: param };
+  database.search(dbBlocks, query, function(rts) {
     if (!rts) {
       res.end('{"error": "unknown transaction requested"}');
       return;
@@ -210,48 +221,54 @@ function getTxInfo(res, param) {
 function showTx(res, rts, param) {
   var block = Block.fromBuffer(rts.d.buffer);
   var txs = block.transactions;
-  var txIndex = rts.t[param];
-  var tx = txs[txIndex];
-  //console.log(JSON.stringify(tx));
-  var response = {
-    txid: tx.hash,
-    version: tx.version,
-    locktime: tx.nLockTime,
-    block: rts.i,
-    index: txIndex,
-    timestamp: block.header.time,
-    confirmations: (bestIndex+1-rts.i),
-    inputs: [],
-    outputs: []
-  };
-  if ( (tx.version == 2) && (tx.txComment) ) {
-    response.txComment = tx.txComment.toString();
+  var txIndex = 0;
+  while (txIndex < txs.length) {
+    if (txs[txIndex].hash === param) {
+      var tx = txs[txIndex];
+      var response = {
+        txid: tx.hash,
+        version: tx.version,
+        locktime: tx.nLockTime,
+        block: rts.i,
+        index: txIndex,
+        timestamp: block.header.time,
+        confirmations: (bestIndex+1-rts.i),
+        inputs: [],
+        outputs: []
+      };
+      if ( (tx.version == 2) && (tx.txComment) ) {
+        response.txComment = tx.txComment.toString();
+      }
+      var inputs = tx.inputs;
+      var item;
+      inputs.forEach(function(input) {
+        var prevTxId = input.prevTxId.toString('hex');
+        if (prevTxId == COINBASE) {
+          item = {received_from: 'coinbase'};
+          response.inputs.push(item);
+        }
+        else {
+          var address = inputAddress(input);
+          var txPrevId = input.prevTxId.toString('hex');
+          var n = input.outputIndex;
+          item = {addr: address, received_from: {tx: txPrevId, n: n}};
+          response.inputs.push(item);
+        }
+      });
+      var outputs = tx.outputs;
+      outputs.forEach(function(output) { 
+        var address = outputAddress(output);
+        var amount = (output.satoshis)/SAT;
+        var script  = output.script.toBuffer().toString('hex');
+        var item = {addr: address, amount: amount, script: script};
+        response.outputs.push(item);
+      });
+      res.end(JSON.stringify(response));
+      return;
+    }
+    txIndex++;
   }
-  var inputs = tx.inputs;
-  var item;
-  inputs.forEach(function(input) {
-    var prevTxId = input.prevTxId.toString('hex');
-    if (prevTxId == COINBASE) {
-    item = {received_from: 'coinbase'};
-      response.inputs.push(item);
-    }
-    else {
-      var address = inputAddress(input);
-      var txPrevId = input.prevTxId.toString('hex');
-      var n = input.outputIndex;
-      item = {addr: address, received_from: {tx: txPrevId, n: n}};
-      response.inputs.push(item);
-    }
-  });
-  var outputs = tx.outputs;
-  outputs.forEach(function(output) { 
-    var address = outputAddress(output);
-    var amount = (output.satoshis)/SAT;
-    var script  = output.script.toBuffer().toString('hex');
-    var item = {addr: address, amount: amount, script: script};
-    response.outputs.push(item);
-  });
-  res.end(JSON.stringify(response));
+  res.end(JSON.stringify({error: "unknown"}));
 }
 
 function getAddressFirst(res, param) {
@@ -259,8 +276,8 @@ function getAddressFirst(res, param) {
     res.end('{"error": "unknown address requested"}');
     return;
   }
-  var query = '{ "a.'+param+'": { "$exists": true}}';
-  database.searchSort(dbBlocks, JSON.parse(query), {i: 1}, function(rts) {
+  var query = { a: param };
+  database.searchSort(dbBlocks, query, {i: 1}, function(rts) {
     if (!rts) {
       res.end('{"error": "unknown address requested"}');
       return;
@@ -279,56 +296,145 @@ function getBalance(res, param) {
     res.end('{"error": "unknown address requested"}');
     return;
   }
-  var query = '{ "a.'+param+'": { "$exists": true}}';
-  console.log('jsem tu a hledam v databazi...');
-  database.searchMore(dbBlocks, JSON.parse(query), function(rts) {
+  var query = { a: param };
+  database.searchMore(dbBlocks, query, function(rts) {
     if (!rts) {
       res.end('{"error": "unknown address requested"}');
       return;
     }
-    console.log('tak databaze prohledana, jdeme pocitat...' + rts.length);
-    var balance = 0;
-    var txo = {};
-    rts.forEach( function(item) { 
-//      console.log(item);
-      var block = Block.fromBuffer(item.d.buffer);
-      var txs = block.transactions;
-      var hits = item.a[param];
-      if (hits.hasOwnProperty('O')) {
-        var X = hits.O;
-        X.forEach( function(x) {
-          var ti = x[0];
-          var oi = x[1];
-          var hash = txs[ti].hash;
-          var ident = hash + '_' + oi;
-          txo[ident] = {value: txs[ti].outputs[oi].satoshis, spent: false};
-        });
-      }
-    });
-    rts.forEach( function(item) { 
-      var block = Block.fromBuffer(item.d.buffer);
-      var txs = block.transactions;
-      var hits = item.a[param];
-      if (hits.hasOwnProperty('I')) {
-        var X = hits.I;
-        X.forEach( function(x) {
-          var ti = x[0];
-          var ii = x[1];
-          var txPrevId = txs[ti].inputs[ii].prevTxId.toString('hex');
-          var n = txs[ti].inputs[ii].outputIndex;
-          var ident = txPrevId + '_' + n;
-          txo[ident].spent = true;
-        });
-      }
-    });
-    console.log('a uz jen secist...');
-    var txos = Object.keys(txo);
-    txos.forEach( function(key) {
-      if (txo[key].spent === false)
-        balance += txo[key].value;
-    });
-    console.log('a je to...');
+    if (rts.length > CONFIG.dbLimit) {
+      res.end('{"error": "to many transactions -> wallet is protected "}');
+      return;
+    }
+    var balance = calculateBalance(rts, param);
     res.end(JSON.stringify(balance/SAT));
   });
 }
 
+function calculateBalance(blocks, param) {
+  var balance = 0;
+  var txo = {};
+  blocks.forEach( function(item) { 
+    var block = Block.fromBuffer(item.d.buffer);
+    var txs = block.transactions;
+    txs.forEach ( function(tx) {
+      var n = 0;
+      tx.outputs.forEach( function(output) {
+        var address = outputAddress(output);
+        if (address === param) {
+          var ident = tx.hash + '_' + n;
+          txo[ident] = output.satoshis;
+          balance += output.satoshis;
+        }
+        n++;
+      });
+      tx.inputs.forEach( function(input) {
+        var address = inputAddress(input);
+        if (address === param) {
+          var ident = input.prevTxId.toString('hex') + '_' + input.outputIndex;
+          balance -= txo[ident];
+        }
+      });
+    });
+  });
+  return balance;
+}
+
+function getUnspent(res, param) {
+  if (param == '') {
+    res.end('{"error": "unknown address requested"}');
+    return;
+  }
+  var query = { a: param };
+  console.log('jsem tu a hledam v databazi...');
+  database.searchMore(dbBlocks, query, function(rts) {
+    if (!rts) {
+      res.end('{"error": "unknown address requested"}');
+      return;
+    }
+    if (rts.length > CONFIG.dbLimit) {
+      res.end('{"error": "to many transactions -> wallet is protected "}');
+      return;
+    }
+    var unspent = findUnspent(rts, param);
+    res.end(JSON.stringify(unspent));
+  });
+}
+
+
+function findUnspent(blocks, param) {
+  var txo = {};
+  var unspent = [];
+  blocks.forEach( function(item) { 
+    var block = Block.fromBuffer(item.d.buffer);
+    var txs = block.transactions;
+    txs.forEach ( function(tx) {
+      var n = 0;
+      tx.outputs.forEach( function(output) {
+        var address = outputAddress(output);
+        if (address === param) {
+          var ident = tx.hash + '_' + n;
+          txo[ident] = {tx_hash: tx.hash, tx_output_n: n, value: output.satoshis, confirmations: bestIndex - item.i, script: output.script.toBuffer().toString('hex')};
+        }
+        n++;
+      });
+      tx.inputs.forEach( function(input) {
+        var address = inputAddress(input);
+        if (address === param) {
+          var ident = input.prevTxId.toString('hex') + '_' + input.outputIndex;
+          txo[ident] = 'spent';
+        }
+      });
+    });
+  });
+  Object.keys(txo).forEach( function(k) {
+    if (txo[k] != 'spent') {
+      unspent.push(txo[k]);
+    }
+  });
+  return unspent;
+}
+
+
+/*
+function findUnspent(blocks, param) {
+  console.log('tak databaze prohledana, jdeme pocitat...' + blocks.length);
+  var txo = {};
+  var unspent = [];
+  blocks.forEach( function(item) { 
+    var block = Block.fromBuffer(item.d.buffer);
+    var txs = block.transactions;
+    txs.forEach ( function(tx) {
+      tx.inputs.forEach( function(input) {
+        var address = inputAddress(input);
+        if (address === param) {
+          var ident = input.prevTxId.toString('hex') + '_' + input.outputIndex;
+          txo[ident] = 'spent';
+          console.log(txo[ident]);
+        }
+      });
+    });
+  });
+  blocks.forEach( function(item) { 
+    var block = Block.fromBuffer(item.d.buffer);
+    var txs = block.transactions;
+    txs.forEach ( function(tx) {
+      var n = 0;
+      tx.outputs.forEach( function(output) {
+        var address = outputAddress(output);
+        if (address === param) {
+          var ident = tx.hash + '_' + n;
+          console.log(txo[ident]);
+          if ( txo[ident] != 'spent')
+            unspent.push({tx_hash: tx.hash, tx_output_n: n, value: output.satoshis, confirmations: bestIndex - item.i, script: output.script.toBuffer().toString('hex')});
+        }
+        n++;
+      });
+    });
+  });
+  console.log('hotovo');
+  return unspent;
+}
+
+
+*/

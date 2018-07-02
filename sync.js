@@ -23,7 +23,7 @@ var inputAddress = utils.inputAddress;
 //////////////////////////////////////////////////////////////
 // a simple database interface                              //
 var database =  require('./lib/database');
-var dbBlocks = CONFIG.dbTable;
+var dbBlocks = CONFIG.dbBlocks;
 //////////////////////////////////////////////////////////////
 
 
@@ -79,28 +79,16 @@ pool.connect();
 // inter-proccess comunication 
 // a way to send some info to api proccess
 var ipc=require('node-ipc');
-ipc.config.id = 'sandonodesync';
+ipc.config.id   = 'sandonodesync';
 ipc.config.retry= 1500;
-ipc.config.maxRetries = 2;
-ipc.config.silent = true;
-
-function connectIPC() {
-  ipc.connectTo('sandonodeapi', function() {
-    ipc.of.sandonodeapi.on('connect', function() {
-      ipc.of.sandonodeapi.emit('height', bestIndex);
-      console.log('send height ', bestIndex);
-    });
-  });
-}
-
-connectIPC();
+ipc.serve( function() {
+  sendHeight();
+});
+ipc.server.start();
 
 function sendHeight() {
   console.log('FUNCTION sendHeight() CALLLED ', bestIndex);
-  if (ipc.of['sandonodeapi'].socket.writable)
-    ipc.of['sandonodeapi'].emit('height', bestIndex);
-  else
-    connectIPC();
+  ipc.server.broadcast('height', bestIndex);
 }
 //////////////////////////////////////////////////////////////
 
@@ -115,18 +103,13 @@ function initChain() {
   database.searchCount(dbBlocks, {}, function(result) {
     if (!(result)) {
       console.log('datadase is empty, create the genesis block...');  // a debug line, can be deleted 
-      var block0 = Block.fromBuffer(BLOCK0).toBuffer();
-      var qGenesis = { h: HASH0, i: 0, d: block0 };
-      database.insertArray(dbBlocks, [qGenesis], function() {
-        console.log('genesis block writen to the datadase');      // a debug line, can be deleted  
-        syncChain();
-      });
+      makeNewDatabase();
     }
     else {
       console.log('datadase in not empty, get a bestBlock from the database...');  // a debug line, can be deleted  
-      bestIndex = result-1;
-      database.search(dbBlocks, {i: bestIndex}, function(result2) {
-        bestHash = result2.h;
+      database.search(dbBlocks, {i: (result-1)}, function(result2) {
+        bestHash = result2._id;
+        bestIndex = result2.i;
         syncChain();
       });
     }
@@ -136,9 +119,36 @@ function initChain() {
 
 
 //////////////////////////////////////////////////////////////
+// create new database, if empty
+function makeNewDatabase() {
+   var block = Block.fromBuffer(BLOCK0);
+   var rawBlock = block.toBuffer();
+   var tx = block.transactions[0];
+   var tx_id = tx.hash;
+   var address = 'unknown';
+   var qGenesis = { _id: HASH0, i: 0, d: rawBlock, t: [ tx_id ], a: [ address ] };
+   database.insertArray(dbBlocks, [qGenesis], function() {
+     console.log('genesis block writen to the datadase');      // a debug line, can be deleted  
+     database.createIndex(dbBlocks, { i: 1 }, function() {
+       console.log('blocks indexed');      // a debug line, can be deleted  
+       database.createIndex(dbBlocks, { t: 1 }, function() {
+         console.log('transactions indexed');      // a debug line, can be deleted  
+         database.createIndex(dbBlocks, { a: 1 }, function() {
+           console.log('addresses indexed');      // a debug line, can be deleted  
+           syncChain();
+         });
+       });
+     });
+   });
+}
+//////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
 // a function for a quick sync with the network             //
 var canSortBlocks = true;
 function syncChain() {
+  canSortBlocks = true;
   console.log('best database index is '+bestIndex+' '+bestHash);  // a debug line, can be deleted  
   sendHeight();
   var starts = [bestHash];
@@ -241,8 +251,7 @@ function addIndexes(cache) {
         bestIndex++;
         cache[i].i = bestIndex;
         bestHash = cache[i].h;
-        var decoded = decodeTransactions(cache[i]);  // decode address and transactions
-        rts.push({h: cache[i].h, i: cache[i].i, d: cache[i].d, t: decoded.txs, a: decoded.addrs});
+        rts.push({_id: cache[i].h, i: cache[i].i, d: cache[i].d});
       }
     }
     if (rts.length == cLen)
@@ -285,6 +294,9 @@ function indexBlocks() {
   canSortBlocks = false;                // prevent another call until database operations are finished
   var cLen = treatCache.length;
   var queryI = addIndexes(treatCache);
+  queryI.forEach( function(item) {
+    decodeTransactions(item);  // decode address and transactions
+  });
   var qLen = queryI.length;
   console.log('indexed ' + qLen + ' / ' + cLen  + ' blocks, orphanScore ' + orphanScore); // a debug message, can be deleted
   // push back blocks without index
@@ -299,21 +311,8 @@ function indexBlocks() {
       syncChain();              // continue the sync by requesting a new package of blocks
     });
   }
-  else if ( (orphanScore > 2) || (lastInv > 1) ) {
-    var indexToDelete = bestIndex;
-    database.search(dbBlocks, {i: (indexToDelete-1)}, function(result) {
-      if (result) {
-        bestIndex = result.i;
-        bestHash = result.h;
-        database.erase(dbBlocks, {i: indexToDelete}, function () {
-          canSortBlocks = true;
-          orphanScore=0;
-          wasInitialized = false;
-          pool.disconnect();
-          setTimeout( pool.connect(), 3000);
-        });
-      }
-    }); 
+  else if ( (orphanScore > 3) || (lastInv > 1) ) {
+    resetPool();
   }
   else {
     orphanScore++;
@@ -328,43 +327,55 @@ function indexBlocks() {
 // decode all transactions and addresses
 function decodeTransactions(bbRec) {
 //  console.log('decoding txs...');
-  var txs = {};
-  var addrs = {};
   var block = Block.fromBuffer(bbRec.d);
   var transactions = block.transactions;
-
-  for (var i=0; i<transactions.length; i++) {
-    var hash = transactions[i].hash;
-    txs[hash] = i;
-    var inputs  = transactions[i].inputs;
-    var j;
-    var address;
-    for (j=0; j<inputs.length; j++) {
-      if ((i+j)>0) {   // non-coinbase
-        address = inputAddress(inputs[j]);
-        if (address != 'false') {                 // can not decode PAY_TO_PUBKEY
-          if (!(addrs.hasOwnProperty(address))) {
-            addrs[address] = {I: []};
-          }
-          else if (!(addrs[address].hasOwnProperty('I'))) {
-            addrs[address].I = [];
-          }
-          addrs[address].I.push([i, j]);
-        }
-      }
+  var t = [];
+  var a = [];
+  function addAddrIfNotIn(address) {
+    for (var j=0; j<a.length; j++) {
+      if (a[j] === address)
+        return;
     }
-    var outputs  = transactions[i].outputs;
-    for (j=0; j<outputs.length; j++) {
-      address = outputAddress(outputs[j]);
-      if (!(addrs.hasOwnProperty(address))) {
-        addrs[address] = {O: []};
-      }
-      else if (!(addrs[address].hasOwnProperty('O'))) {
-        addrs[address].O = [];
-      }
-      addrs[address].O.push([i, j]);
-    }
+    a.push(address);
   }
-  return {txs: txs, addrs: addrs};
+  transactions.forEach( function(tx) {
+    t.push( tx.hash );
+    tx.inputs.forEach( function(input) {
+      var address = inputAddress(input);
+      if ( (address != 'false') && (address != 'coinbase') ) {
+        addAddrIfNotIn(address);
+      }
+    });
+    tx.outputs.forEach( function(output) {
+      var address = outputAddress(output);
+      if (address != 'false') {
+        addAddrIfNotIn(address);
+      }
+    });
+  });
+  bbRec.t = t;
+  bbRec.a = a;
 }
 //////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
+// recovery from a fork
+function resetPool() {
+  pool.disconnect();
+  wasInitialized = false;
+  orphanScore=0;
+  canSortBlocks = false;
+  blockCache = [];
+  treatCache = [];
+  intoCache = 0;
+  lastInv = 0;
+  var indexToDelete = bestIndex - 12;
+  if (indexToDelete <=0)
+    indexToDelete = 0;
+  database.erase(dbBlocks, {i: {$gt: indexToDelete}}, function () {
+    pool.connect();
+  });
+}
+//////////////////////////////////////////////////////////////
+
