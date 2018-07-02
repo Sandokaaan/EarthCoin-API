@@ -30,6 +30,7 @@ This code is under development, some functions are not implemented, yet.
 - Sync from a network. Legacy EarthCoin daemon is not required. Under test conditions the node got full sync from a scratch within a hour.
 - Api can show any block on hash or index query.
 - Api can show any transaction and address balance.
+- Api function for unspent balance (UTXO). Addresses with more that CONFIG.dbLimit are not shown because of complexity of the calculation (may take up to 30 seconds).
 
 
 ## To do list:
@@ -43,4 +44,5 @@ This code is under development, some functions are not implemented, yet.
 - Standardize modular design of the code, add NPM installer.
 - ~~Split API and SYNC into two independend proccesses. Some API calls can break the sync.~~
 - ~~A better design of transaction indexing --> speed-up calculation of a big wallet balance.~~
-- A request for balance of an address with a huge number of transactions can cause DoS. Only small wallets will be enabled without API key.
+- ~~A request for balance of an address with a huge number of transactions can cause DoS. Only small wallets will be enabled without API key.~~
+- A database structure for a quick calculation of unspent balance for mining addresses (about 10-50k coinbase transactions) ???
