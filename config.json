@@ -1,4 +1,7 @@
 {
+  "coinName": "EarthCoin",
+  "ticker": "EAC",
+  "nodeID": "explorer.eac",          /* IP address or domain name of this server*/
   "network": {
     "name": "earthcoin",
     "alias": "eacnet",
@@ -18,7 +21,6 @@
   },
   "trustedNodes" : [
     { "ip": {"v4": "46.28.107.182"} },
-    { "ip": {"v4": "5.9.10.66"} },
     { "ip": {"v4": "47.100.119.161"} },
     { "ip": {"v4": "59.110.164.172"} },
     { "ip": {"v4": "76.169.51.184"} },
@@ -26,11 +28,12 @@
     { "ip": {"v4": "80.211.198.20"} },
     { "ip": {"v4": "144.217.67.68"} },
     { "ip": {"v4": "119.27.187.110"} },
+    { "ip": {"v4": "5.9.10.66"} },
     { "ip": {"v4": "127.0.0.1"} }
   ],
   "apiPort": 3000,                   /* port number for API server */
   "dbIP": "127.0.0.1",               /* IP address with Mongodb server, default localhost (127.0.0.1) */
-  "dbPort": 27017,                   /* port number of Mongodb server, default 27017 */
+  "dbPort": 47017,                   /* port number of Mongodb server, default 27017 */
   "dbName": "dbEarthCoin",           /* name of database*/
   "dbBlocks": "blocks",              /* name of main table in the database */
   "dbLimit": 500                     /* protect against database DoS by quering a large wallet balance */

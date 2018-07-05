@@ -203,7 +203,7 @@ pool.on('peerblock', function(peer, message) {
   var rawBlock = block.toBuffer(); 
   var rqThis = {h: hash,  p: prevHash, d: rawBlock,};
   blockCache.push(rqThis);
-  if ((blockCache.length >= intoCache) && (canSortBlocks)) {
+  if (((blockCache.length >= intoCache)||(blockCache.length>=12*lastInv)) && (canSortBlocks)) {
     console.log('limit of blocks reached ' + blockCache.length + '/' + intoCache);  // a debug message, can be deleted
     treatCache = blockCache;    // move all block to the second array
     blockCache = [];            // and empty the cache
