@@ -26,7 +26,7 @@ http://<YOUR_SERVER_ADDRESS>:3000/
 This code is under development, some functions are not implemented, yet.
 
 
-## What work?
+## What does work?
 - Sync from a network. Legacy EarthCoin daemon is not required. Under test conditions the node got full sync from a scratch within a hour.
 - API can show any block on hash or index query.
 - API can show any transaction and address balance.
