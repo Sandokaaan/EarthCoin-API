@@ -48,3 +48,4 @@ This code is under development, some functions are not implemented, yet.
 - ~~A better design of transaction indexing --> speed-up calculation of a big wallet balance.~~
 - ~~A request for balance of an address with a huge number of transactions can cause DoS. Only small wallets will be enabled without API key.~~
 - A database structure for a quick calculation of unspent balance for mining addresses (about 10-50k coinbase transactions) ???
+- API documentation
