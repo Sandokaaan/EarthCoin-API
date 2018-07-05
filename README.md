@@ -28,16 +28,18 @@ This code is under development, some functions are not implemented, yet.
 
 ## What work?
 - Sync from a network. Legacy EarthCoin daemon is not required. Under test conditions the node got full sync from a scratch within a hour.
-- Api can show any block on hash or index query.
-- Api can show any transaction and address balance.
-- Api function for unspent balance (UTXO). Addresses with more that CONFIG.dbLimit are not shown because of complexity of the calculation (may take up to 30 seconds).
+- API can show any block on hash or index query.
+- API can show any transaction and address balance.
+- API function for unspent balance (UTXO). Addresses with more that CONFIG.dbLimit are not shown because of complexity of the calculation (may take up to 30 seconds).
+- API function 'txbyaddr' on demand of a dev-team member.
+- Block Explorer - simple HTML version without graphics and client-side scripts
 
 
 ## To do list:
 - ~~Configuration is hardcoded in the javascript for now. Need to be moved to a .json file to easier setup.~~
 - ~~Detection of forks/orphans blocks - it is still buggy, from time to time lost the sync~~
 - ~~Indexing of transactions and API functions for read transactions info.~~
-- Block explorer frontend based on the API.
+- ~~~Block explorer frontend based on the API.~~~
 - Implement functions for both-way comunication. For now the node not answer to other nodes queries.
 - Automatic selection of the best node for data download, eg. based on a ping delay.
 - Optimization of the code for multi-node queries, now the code select one network node to request all block data.
