@@ -190,9 +190,8 @@ pool.on('peeraddr', function(peer, message) {
 // which usualy last a day or more. There is also the "headers-first"
 // method for sync, which was finished in my test within 2 minutes, 
 // however the algorithm was not stable, so left for a future upgrade.
-var blockCache = [];   // an array for blocks temporary storage
-var treatCache = [];   // the second array, in which the blocks are indexed
-var intoCache = 0;     // a counter for blocks stored in the cache
+var blockCache = {};   // an pseudo-array for blocks temporary storage
+var treatCache = {};   // the second pseudo-array, in which the blocks are indexed
 var lastInv = 0;
 
 pool.on('peerblock', function(peer, message) {
@@ -201,14 +200,13 @@ pool.on('peerblock', function(peer, message) {
   var hash = header.hash;
   var prevHash = convHash(header.prevHash);
   var rawBlock = block.toBuffer(); 
-  var rqThis = {h: hash,  p: prevHash, d: rawBlock,};
-  blockCache.push(rqThis);
-  if (((blockCache.length >= intoCache)||(blockCache.length>=12*lastInv)) && (canSortBlocks)) {
-    console.log('limit of blocks reached ' + blockCache.length + '/' + intoCache);  // a debug message, can be deleted
+  blockCache[prevHash] = {h: hash, d: rawBlock};
+  var intoCache = Object.keys(blockCache).length;
+  if ( (intoCache >= lastInv) && (canSortBlocks) ) {
+    console.log('limit of blocks reached ' + intoCache + '/' + lastInv);  // a debug message, can be deleted
     treatCache = blockCache;    // move all block to the second array
-    blockCache = [];            // and empty the cache
+    blockCache = {};            // and empty the cache
     indexBlocks();
-    intoCache = 0;
   }
 });
 
@@ -227,9 +225,8 @@ pool.on('peerinv', function(peer, message) {
   if (invs.length > 0)
     if ((invs[0].type)==2) {
       lastInv = invs.length;
-      intoCache += lastInv;    // count only blocks but answer to all messages?
+      var intoCache = Object.keys(blockCache).length;
       console.log('got an inventory ' + invs.length + '/' + intoCache + ' sort: ' + canSortBlocks);  // a debug message, can be deleted
-      // console.log('inv type '+ invs[0].type + ': ' + convHash(invs[0].hash));
       var messages = new Messages();
       var msg = messages.GetData(invs);
       peer.sendMessage(msg);
@@ -240,47 +237,40 @@ pool.on('peerinv', function(peer, message) {
 //////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////
-// a double loop for indexing new blocks and transactions
+// a loop for indexing of new blocks
+//
 function addIndexes(cache) {
   var rts = [];
-  var cLen = cache.length;
+  var cLen = Object.keys(cache).length;
   console.log('now ' + cLen + ' blocks should be sorted...');  // a debug message, can be deleted
-  for (var j = 0; j < cLen; j++) {
-    for (var i = 0; i < cLen; i++) {
-      if (cache[i].p == bestHash) {
-        bestIndex++;
-        cache[i].i = bestIndex;
-        bestHash = cache[i].h;
-        rts.push({_id: cache[i].h, i: cache[i].i, d: cache[i].d});
-      }
-    }
-    if (rts.length == cLen)
-      break;      // all have been indexed, yet
+  while (cache.hasOwnProperty(bestHash)) {
+    bestIndex++;
+    var newBestHash = cache[bestHash].h;
+    cache[bestHash].i = bestIndex;
+    rts.push({_id: newBestHash, i: bestIndex, d: cache[bestHash].d});
+    bestHash = newBestHash;
   }
   return rts;
 }
 //////////////////////////////////////////////////////////////
 
+
+//////////////////////////////////////////////////////////////
+//
 function pushBackNoIndex() {
   var iBack = 0;
-  treatCache.forEach(function(item) {
-    if (!(item.hasOwnProperty('i'))) {
-      var repeat = false;
-      for (var i=0; i<blockCache.length; i++) {
-        if (blockCache[i].h === item.h) {
-          repeat = true;
-          break;
-        }
-      }
-      if (!repeat) {
-        intoCache++;
+  Object.keys(treatCache).forEach( function(key) {
+    if (!(treatCache[key].hasOwnProperty('i'))) {
+      if (!(blockCache.hasOwnProperty(key))) {
+        blockCache[key] = treatCache[key];
         iBack++;
-        blockCache.push(item);
       }
     }
   });
   console.log('... pushed back ' + iBack + ' blocks');
 }
+//////////////////////////////////////////////////////////////
+
 
 //////////////////////////////////////////////////////////////
 // A function for sorting the blocks in the cache and asign 
@@ -292,7 +282,7 @@ function pushBackNoIndex() {
 var orphanScore = 0;
 function indexBlocks() {
   canSortBlocks = false;                // prevent another call until database operations are finished
-  var cLen = treatCache.length;
+  var cLen = Object.keys(treatCache).length;
   var queryI = addIndexes(treatCache);
   queryI.forEach( function(item) {
     decodeTransactions(item);  // decode address and transactions
@@ -323,38 +313,64 @@ function indexBlocks() {
 
 
 //////////////////////////////////////////////////////////////
+// a short identifier of a transaction output (blockIndex+txIndex+outputIndex)
+//
+function OID(typ, ti, oi) {
+ return (typ + '_' + ti + '_' + oi);
+}
+//////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
 // Just before blocks been stored to the database, try to 
 // decode all transactions and addresses
 function decodeTransactions(bbRec) {
 //  console.log('decoding txs...');
   var block = Block.fromBuffer(bbRec.d);
+  var revHexBlock = convHash(bbRec.d);
   var transactions = block.transactions;
   var t = [];
   var a = [];
-  function addAddrIfNotIn(address) {
+  var b = [];
+  function addAddrIfNotIn(address, oid, val) {
     for (var j=0; j<a.length; j++) {
-      if (a[j] === address)
+      if (a[j] === address) {
+        b[j][oid] = val;
         return;
+      }
     }
     a.push(address);
+    var k = b.length;
+    b.push({});
+    b[k][oid] = val;
   }
+  var ti=0;
   transactions.forEach( function(tx) {
     t.push( tx.hash );
+    var n = 0;
     tx.inputs.forEach( function(input) {
       var address = inputAddress(input);
-      if ( (address != 'false') && (address != 'coinbase') ) {
-        addAddrIfNotIn(address);
+      if ( address != 'coinbase' ) {
+        var prevTx = input.prevTxId.toString('hex');
+        var pos = revHexBlock.indexOf(prevTx);
+        var outIndex = input.outputIndex;
+        addAddrIfNotIn(address, OID('i', ti, n), OID('r', pos, outIndex));                 // spent
       }
+      n++;
     });
+    n = 0;
     tx.outputs.forEach( function(output) {
       var address = outputAddress(output);
       if (address != 'false') {
-        addAddrIfNotIn(address);
+        addAddrIfNotIn(address, OID('o', ti, n), output.satoshis);    // received
       }
+      n++;
     });
+    ti++;
   });
   bbRec.t = t;
   bbRec.a = a;
+  bbRec.b = b;
 }
 //////////////////////////////////////////////////////////////
 
@@ -366,9 +382,8 @@ function resetPool() {
   wasInitialized = false;
   orphanScore=0;
   canSortBlocks = false;
-  blockCache = [];
-  treatCache = [];
-  intoCache = 0;
+  blockCache = {};
+  treatCache = {};
   lastInv = 0;
   var indexToDelete = bestIndex - 12;
   if (indexToDelete <=0)

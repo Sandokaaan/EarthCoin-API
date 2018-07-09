@@ -173,6 +173,18 @@ function condPush(list, item) {
 //////////////////////////////////////////////////////////////
 
 
+//////////////////////////////////////////////////////////////
+// Indexing of address usage in the database by 'oid' parameter
+// 'char_number1_number2'. This function split it back to 3
+// components
+//
+function DEOID(oid) {
+  var arr = oid.split('_');
+  return {typ: arr[0], ti: Number(arr[1]), oi: Number(arr[2])};
+}
+//////////////////////////////////////////////////////////////
+
+
 
 //////////////////////////////////////////////////////////////
 //   ***  API-call functions  ***                           //
@@ -205,6 +217,9 @@ console.log(command, param);
     case 'addressfirstseen':
       showAddressFirst(res, param);
       break;
+    case 'addressinfo':
+      showAddrInfo(res, param);
+      break;
     case 'getbalance':
     case 'balance':
       showBalance(res, param);
@@ -236,6 +251,7 @@ function showHelp(res) {
       tx: "the same as txinfo",
       addressfirstseen: "return the time when ADDRESS appeared in the blockchain: http://url:port/api/addressfirstseen/ADDRESS",
       getbalance: "return balance of ADDRESS: http://url:port/api/getbalance/ADDRESS",
+      addressinfo: "return a short summary of the address balance and transactions",
       balance: "the same as getbalance",
       utxo: "return unspent transaction outputs of ADDRESS: http://url:port/api/utxo/ADDRESS",
       unspent: "the same as utxo",
@@ -415,7 +431,7 @@ function showAddressFirst(res, param) {
     return;
   }
   var query = { a: param };
-  database.searchSort(dbBlocks, query, {i: 1}, function(rts) {
+  database.search(dbBlocks, query, function(rts) {      // no need for a sort-search, blocks have been sorted in the database
     if (!rts) {
       res.end('{"error": "unknown address requested"}');
       return;
@@ -428,18 +444,8 @@ function showAddressFirst(res, param) {
 
 //////////////////////////////////////////////////////////////
 // API command to show the avaiable balance on an address.
-// Due to the complexity of this implementation of the function,
-// a limitation is set in the config.json file (property dbLimit).
 // Calculation for a large address (e.g. used for mining) take place
 // up to 30 seconds.
-// TODO: Design either another database structure or a faster algorithm 
-// for the account balance calculation, then enable this function
-// for all addresses.
-// Dev note: This API is primarily created as a backend for Android wallet.
-// It is not a good practice to reuse an addres from which a transaction was sent
-// so in an ideal case there always were only two transactions on an address - 
-// one deposit and one redeem. Default limit is set to 500 transactions,
-// can be changed in the config.json based on the server speed.
 //
 function showBalance(res, param) {
   if (param == '') {
@@ -452,56 +458,35 @@ function showBalance(res, param) {
       res.end('{"error": "unknown address requested"}');
       return;
     }
-    if (rts.length > CONFIG.dbLimit) {
-      res.end('{"error": "to many transactions -> wallet is protected "}');
-      return;
-    }
-    var balance = calculateBalance(rts, param);
-    res.end(JSON.stringify(balance/SAT));
+    var jsonRts = exBalance(param, rts);
+    var balance = jsonRts.balance;
+    res.end(JSON.stringify(balance));
   });
 }
 //////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////
-// Calculate the avaiable balance on an address. It requires 
-// list of block records found in the database and the address
-// as the function parameters. 
-// TODO: Code this function in c++ and call it as an external
-// binary call for the faster response in the case of a large
-// account balance? The problem is not in the database query,
-// if the databese is indexed, the database response is nearly
-// instant, but there is too much nested loops in this function,
-// so the complexity and the time consumption grows exponentially.
+// API command to show the a short summary of an address.
+// Calculation for a large address (e.g. used for mining) take place
+// up to 30 seconds.
 //
-function calculateBalance(blocks, param) {
-  var balance = 0;
-  var txo = {};
-  blocks.forEach( function(item) { 
-    var block = Block.fromBuffer(item.d.buffer);
-    var txs = block.transactions;
-    txs.forEach ( function(tx) {
-      var n = 0;
-      tx.outputs.forEach( function(output) {
-        var address = outputAddress(output);
-        if (address === param) {
-          var ident = tx.hash + '_' + n;
-          txo[ident] = output.satoshis;
-          balance += output.satoshis;
-        }
-        n++;
-      });
-      tx.inputs.forEach( function(input) {
-        var address = inputAddress(input);
-        if (address === param) {
-          var ident = input.prevTxId.toString('hex') + '_' + input.outputIndex;
-          balance -= txo[ident];
-        }
-      });
-    });
+function showAddrInfo(res, param) {
+  if (param == '') {
+    res.end('{"error": "unknown address requested"}');
+    return;
+  }
+  var query = { a: param };
+  database.searchMore(dbBlocks, query, function(rts) {
+    if (!rts) {
+      res.end('{"error": "unknown address requested"}');
+      return;
+    }
+    var jsonRts = exBalance(param, rts);
+    res.end(JSON.stringify(jsonRts));
   });
-  return balance;
 }
 //////////////////////////////////////////////////////////////
+
 
 //////////////////////////////////////////////////////////////
 // API command to show the unspent outputs of an address.
@@ -539,31 +524,38 @@ function showUnspent(res, param) {
 function findUnspent(blocks, param) {
   var txo = {};
   var unspent = [];
-  blocks.forEach( function(item) { 
-    var block = Block.fromBuffer(item.d.buffer);
+  blocks.forEach( function(blockRecord) { 
+    var block = Block.fromBuffer(blockRecord.d.buffer);
     var txs = block.transactions;
-    txs.forEach ( function(tx) {
-      var n = 0;
-      tx.outputs.forEach( function(output) {
-        var address = outputAddress(output);
-        if (address === param) {
-          var ident = tx.hash + '_' + n;
-          txo[ident] = {tx_hash: tx.hash, tx_output_n: n, value: output.satoshis, confirmations: bestIndex - item.i, script: output.script.toBuffer().toString('hex')};
-        }
-        n++;
-      });
-      tx.inputs.forEach( function(input) {
-        var address = inputAddress(input);
-        if (address === param) {
-          var ident = input.prevTxId.toString('hex') + '_' + input.outputIndex;
-          txo[ident] = 'spent';
-        }
-      });
+    var i=0;
+    while (blockRecord.a[i] != param)
+      i++;
+    var b = blockRecord.b[i];
+    Object.keys(b).forEach( function(c) {
+      var doid = DEOID(c);
+      var tx = txs[doid.ti];
+      if (doid.typ == 'o') {
+        var id =  tx.hash + '_' + doid.oi;
+        txo[id] = {
+          tx_hash: tx.hash,
+          tx_output_n: doid.oi,
+          value: b[c],
+          confirmations: bestIndex - blockRecord.i,
+          script: tx.outputs[doid.oi].script.toBuffer().toString('hex')
+        };
+      }
+      else {
+        var input = tx.inputs[doid.oi];
+        var prevTxId = input.prevTxId.toString('hex');
+        var outIndex = input.outputIndex;
+        var idSpent = prevTxId + '_' + outIndex;
+        txo[idSpent] = false;
+      }
     });
   });
-  Object.keys(txo).forEach( function(k) {
-    if (txo[k] != 'spent') {
-      unspent.push(txo[k]);
+  Object.values(txo).forEach( function(item) {
+    if (item != false) {
+      unspent.push(item);
     }
   });
   return unspent;
@@ -605,56 +597,74 @@ function showTxByAddr(res, param) {
 //
 function findAllTx(blocks, param, callBack) {
   var txo = {};
-  var all = [];
-  blocks.forEach( function(item) { 
-    var block = Block.fromBuffer(item.d.buffer);
+  blocks.forEach( function(blockRecord) { 
+    var block = Block.fromBuffer(blockRecord.d.buffer);
     var txs = block.transactions;
-    var m = 0;
-    txs.forEach ( function(tx) {
-      var n = 0;
+    var i=0;
+    while (blockRecord.a[i] != param)
+      i++;
+    var b = blockRecord.b[i];
+    Object.keys(b).forEach( function(c) {
       var toAddrs = [];
-      var needSrcAddrs = [];
       var srcAddrs = [];
-      tx.outputs.forEach( function(output) {
-        var address = outputAddress(output);
-        toAddrs.push(address);
-        if (address === param) {
-          var ident = tx.hash + '_' + n;
-          needSrcAddrs.push(ident);
-          var blockInfo = { block_hash: item._id, block_height: item.i, block_time: block.header.time };
-          var txInfo = { tx_hash: tx.hash, tx_index: m, tx_comment: tx.txComment, tx_output_index: n, confirmations: bestIndex - item.i };
-          var fromInfo = { source: 'unknown', block: blockInfo, transaction: txInfo }
-          txo[ident] = { value: output.satoshis, script: output.script.toBuffer().toString('hex'), spent: false, received_from: fromInfo };
-        }
-        n++;
-      });
-      n = 0;
-      tx.inputs.forEach( function(input) {
-        var address = inputAddress(input);
-        if (needSrcAddrs.length > 0) {
-          srcAddrs.push(address);
-        }
-        if (address === param) {
-          var prevTxId = input.prevTxId.toString('hex');
-          var ident = prevTxId + '_' + input.outputIndex;
-          txo[ident].spent = true;
-          var blockInfo = { block_hash: item._id, block_height: item.i, block_time: block.header.time };
-          var txInfo = { tx_hash: tx.hash, tx_index: m, tx_comment: tx.txComment, tx_input_index: n, confirmations: bestIndex - item.i };
-          var spentInTx = { target: toAddrs, block: blockInfo, transaction: txInfo };
-          txo[ident].sent_to = spentInTx;
-        }
-        n++;
-      });
-      needSrcAddrs.forEach( function(src) {
-        txo[src].received_from.source = srcAddrs;
-      });
-      m++;
+      var doid = DEOID(c);
+      var tx = txs[doid.ti];
+      var blockInfo = { 
+        block_hash: blockRecord._id,
+        block_height: blockRecord.i,
+        block_time: block.header.time
+      };
+      var txInfo;
+      if (doid.typ == 'o') {
+        var id =  tx.hash + '_' + doid.oi;
+        tx.inputs.forEach( function(input) {
+          condPush(srcAddrs, inputAddress(input));
+        });
+        txInfo = {
+          tx_hash: tx.hash,
+          tx_index: doid.ti,
+          tx_comment: tx.txComment,
+          tx_output_index: doid.oi,
+          confirmations: bestIndex - blockRecord.i
+        };
+        var fromInfo = {
+          source: srcAddrs,
+          block: blockInfo,
+          transaction: txInfo 
+        };
+        txo[id] = {
+          value: b[c],
+          script: tx.outputs[doid.oi].script.toBuffer().toString('hex'),
+          spent: false,
+          received_from: fromInfo
+        };
+      }
+      else {
+        tx.outputs.forEach( function(output) {
+          condPush(toAddrs, outputAddress(output));
+        });
+        var input = tx.inputs[doid.oi];
+        var prevTxId = input.prevTxId.toString('hex');
+        var outIndex = input.outputIndex;
+        var idSpent = prevTxId + '_' + outIndex;
+        txInfo = {
+          tx_hash: tx.hash,
+          tx_index: doid.ti,
+          tx_comment: tx.txComment,
+          tx_input_index: doid.oi,
+          confirmations: bestIndex - blockRecord.i
+        };
+        var spentInTx = {
+          target: toAddrs,
+          block: blockInfo,
+          transaction: txInfo
+        };
+        txo[idSpent].spent = true;
+        txo[idSpent].sent_to = spentInTx;
+      }
     });
   });
-  Object.keys(txo).forEach( function(k) {
-    all.push(txo[k]);
-  });
-  callBack(all);
+  callBack(Object.values(txo));
 }
 //////////////////////////////////////////////////////////////
 
@@ -796,7 +806,7 @@ function universalSearch(param, callBack) {
       return;
     }
     else if (rts.length > 1) { // address
-      response = exAddress(param, rts);
+      response = exAddress(exBalance(param, rts));
       callBack(response);
       return;
     }
@@ -820,7 +830,7 @@ function universalSearch(param, callBack) {
         }
       }
       // probably address
-      response = exAddress(param, rts);
+      response = exAddress(exBalance(param, rts));
       callBack(response);
       return;
     }
@@ -844,14 +854,81 @@ function exFind(res, param) {
 // Block Explorer function to show the API documentation.
 // TODO: Create the API documentation!
 //
-function exHelp(res, param) {
-  universalSearch(param, function(response) {
-    exHeader(res);
-    res.write('Place here the API documentation...');
-    exFooter(res);
-  });
+function exHelp(res) {
+  exHeader(res);
+  res.write('Place here the API documentation...');
+  exFooter(res);
 }
 //////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
+// a sub-procedure to calculate balance and totalReceived 
+// of an address
+//
+function exBalance(param, found) {
+  console.log('memory db start');
+  var txo = {};
+  var cntr = {};
+  var cnts = {};
+  var totalReceived = 0;
+  var balance = 0;
+  found.forEach( function(blockRecord) {
+    var revBlockHex = null;
+    var i=0;
+    while (blockRecord.a[i] != param)
+      i++;
+    var b = blockRecord.b[i];
+    Object.keys(b).forEach( function(c) {
+      var doid = DEOID(c);
+      var txId = blockRecord.t[doid.ti];
+      if (doid.typ == 'o') {
+        var id =  txId + '_' + doid.oi;
+        var received = b[c];
+        txo[id] = received;
+        totalReceived += received;
+        balance += received;
+        cntr[txId] = true;
+      }
+      else {
+        if (!revBlockHex)
+          revBlockHex = convHash(blockRecord.d.buffer);
+        var doid2 = DEOID(b[c]);
+        var pos = doid2.ti;
+        var prevTxId = revBlockHex.substring(pos, pos+64);
+        var idSpent = prevTxId + '_' + doid2.oi;
+        balance -= txo[idSpent];
+        txo[idSpent] = 0;
+        cnts[txId] = true;
+      }
+    });
+  });
+  var firstBlock = Block.fromBuffer(found[0].d.buffer);
+  var fbt = timeToISO(firstBlock.header.time);
+  var fbi = found[0].i;
+  var lbt = fbt;
+  var lbi = found[found.length-1].i;
+  if (found.length > 1) {
+    var lastBlock = Block.fromBuffer(found[found.length-1].d.buffer);
+    lbt = timeToISO(lastBlock.header.time);
+  }
+  console.log('memory db end');
+  return { 
+    address: param,
+    balance: balance/SAT, 
+    received: totalReceived/SAT,
+    sent: (totalReceived-balance)/SAT,
+    txIn: Object.values(cntr).length,
+    txOut: Object.values(cnts).length,
+    blocks: found.length,
+    firstTxBlock: fbi,
+    firstTxTime: fbt,
+    lastTxBlock: lbi,
+    lastTxTime: lbt
+  };
+}
+//////////////////////////////////////////////////////////////
+
 
 //////////////////////////////////////////////////////////////
 // A daughter function of universalSearch function for the case
@@ -859,44 +936,25 @@ function exHelp(res, param) {
 // Extract information on particular address (passed in param)
 // from the list of block database records (passed in found)
 // and return them in the HTML format.
-// Due to the algorithm complexity, there is a limit on 
-// count of transactions, so only for address with less than
-// 500 transactions the correct balnce is shown.
 //
-function exAddress(param, found) {
-  var response = '<H3>Details of address ' + param + '</H1><HR><table width="100%">';
-  response+= '<tr><td width="25%">Address</td><td width="75%">' + param + '</td></tr>';
-  response+= '<tr><td>Count of Blocks</td><td>' + found.length + '</td></tr>';
-  var firstBlock = Block.fromBuffer(found[0].d.buffer);
-  response+= '<tr><td>First Transaction</td><td>' + timeToISO(firstBlock.header.time);
+function exAddress(rts) {
+  var response = '<H3>Details of address ' + rts.address + '</H1><HR><table width="100%">';
+  response+= '<tr><td width="25%">Address</td><td width="75%">' + rts.address + '</td></tr>';
+  response+= '<tr><td>Balance (' + CONFIG.ticker + ') </td><td><b>' + rts.balance + '</b></td></tr>';
+  response+= '<tr><td>Received (' + CONFIG.ticker + ') </td><td>' + rts.received;
+  response+= '&nbsp;&nbsp;&nbsp;&nbsp; <font color="gray">in ' + rts.txIn + ' transactions</font></td></tr>';
+  response+= '<tr><td>Sent (' + CONFIG.ticker + ') </td><td>' + rts.sent;
+  if (rts.txOut > 0)
+    response+= '&nbsp;&nbsp;&nbsp;&nbsp; <font color="gray">in ' + rts.txOut + ' transactions</font>';
+  response+= '</td></tr>';
+  response+= '<tr><td>Blocks Effected</td><td>' + rts.blocks + '</td></tr>';
+  response+= '<tr><td>First Transaction</td><td>' + rts.firstTxTime;
   response+= '&nbsp;&nbsp;&nbsp;&nbsp;<font color="gray"> in block <a href="/find?q=';
-  response+= found[0].i + '">' + found[0].i + '</a></font></td></tr>';
-  if (found.length > 1) {
-    var lastBlock = Block.fromBuffer(found[found.length-1].d.buffer);
-    response+= '<tr><td>Last Transaction</td><td>' + timeToISO(lastBlock.header.time);
+  response+= rts.firstTxBlock + '">' + rts.firstTxBlock + '</a></font></td></tr>';
+  if (rts.firstTxBlock != rts.lastTxBlock) {
+    response+= '<tr><td>Last Transaction</td><td>' + rts.lastTxTime;
     response+= '&nbsp;&nbsp;&nbsp;&nbsp;<font color="gray"> in block <a href="/find?q=';
-    response+= found[found.length-1].i + '">' + found[found.length-1].i + '</a></font></td></tr>';
-  }
-  if (found.length < CONFIG.dbLimit) {
-    var totalReceived = 0;
-    var cnt = 0;
-    found.forEach( function(blockRecord) {
-      var block = Block.fromBuffer(blockRecord.d.buffer);
-      block.transactions.forEach( function(tx) {
-        tx.outputs.forEach( function(output) {
-          if (outputAddress(output) === param) {
-            totalReceived += output.satoshis;
-            cnt++;
-          }
-        });
-      });
-    });
-    response+= '<tr><td>Received (' + CONFIG.ticker + ') </td><td>' + totalReceived/SAT;
-    response+= '&nbsp;&nbsp;&nbsp;&nbsp; <font color="gray">in ' + cnt + ' transactions</font></td></tr>';
-    response+= '<tr><td>Balance (' + CONFIG.ticker + ') </td><td><b>' + calculateBalance(found, param)/SAT + '</b></td><tr>';
-  }
-  else {
-    response+= '<tr><td><font color="red">Protected</font></td><td><font color="red">This is a protected address, balance will not be shown.</font></td></tr>';
+    response+= rts.lastTxBlock + '">' + rts.lastTxBlock + '</a></font></td></tr>';
   }
   response+= '</table>';
   return response;
@@ -964,7 +1022,7 @@ function exBlock(param, found) {
   response+= '<td width="20%" align="center">To</td><td width="10%" align="center">Amount (' + CONFIG.ticker + ')</td</tr>';
   i = 0;
   txHashes.forEach( function(tx) {
-    response+= '<tr><td align="center">' + i + '</td><td align="center"><a href=/find?q='+tx+'>'
+    response+= '<tr><td align="center">' + i + '</td><td align="center"><a href=/find?q='+tx+'>';
     response+= tx + '</a></td><td align="center">';
     response+= valuesOut[i]/SAT + '</td><td align="center">';
     txFroms[i].forEach( function(from) {
@@ -1015,25 +1073,25 @@ function exTx(param, found) {
   response+= '<td width="45%" align="center">Output Addresses</td>';
   response+= '<td width="10%" align="center">Amount (' + CONFIG.ticker + ')</td></tr>';
   response+= '<tr><td align="center">';
-  ins = [];
+  var ins = [];
   txs[i].inputs.forEach( function(input) {
     condPush(ins, inputAddress(input));
   });
   ins.forEach( function(ia) {
     response+= (ia === 'coinbase') ? ia + '<br>' : '<a href="/find?q=' + ia + '">' + ia + '</a><br>';
   });
-  response+= '</td><td align="center">'
+  response+= '</td><td align="center">';
   txs[i].outputs.forEach( function(output) {
     response+= '<a href="/find?q=' + outputAddress(output) + '">' + outputAddress(output) + '</a><br>';
   });
-  response+= '</td><td align="center">'
+  response+= '</td><td align="center">';
   var sum = 0;
   txs[i].outputs.forEach( function(output) {
     response+= output.satoshis/SAT + '<br>';
     sum += output.satoshis;
   });
-  response+= '</td></tr>'
-  response+= '<tr><td></td><td align="right"><b>Total output &nbsp;&nbsp;</b></td><td align="center"><b>'+sum/SAT+'</b></td></tr>'
+  response+= '</td></tr>';
+  response+= '<tr><td></td><td align="right"><b>Total output &nbsp;&nbsp;</b></td><td align="center"><b>'+sum/SAT+'</b></td></tr>';
   response+= '</table>';
   return response;
 }

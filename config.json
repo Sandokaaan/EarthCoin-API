@@ -36,5 +36,5 @@
   "dbPort": 27017,                   /* port number of Mongodb server, default 27017 */
   "dbName": "dbEarthCoin",           /* name of database*/
   "dbBlocks": "blocks",              /* name of main table in the database */
-  "dbLimit": 500                     /* protect against database DoS by quering a large wallet balance */
+  "dbLimit": 10000                   /* protect against database DoS by quering a large wallet balance */
 }
