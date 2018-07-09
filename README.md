@@ -8,12 +8,21 @@ Full EarthCoin node with API based on bitpay/bitcore
 
 
 ## Install & run:
-
+```
 git clone https://github.com/Sandokaaan/EarthCoin-API.git 
-
 cd EarthCoin-API
 nodejs sync.js &
 nodejs api.js &
+```
+
+## Upgrade from an older pre-release version
+If an erlier version of this code was run on your machine, the old database data have to be deleted manually by commands:
+```
+mongo
+use dbEarthCoin
+db.dropDatabase()
+exit
+```
 
 ## Configuration
 Some parameters, such as port number or preffered network nodes can be set in the file 'config.json'
@@ -47,5 +56,5 @@ This code is under development, some functions are not implemented, yet.
 - ~~Split API and SYNC into two independend proccesses. Some API calls can break the sync.~~
 - ~~A better design of transaction indexing --> speed-up calculation of a big wallet balance.~~
 - ~~A request for balance of an address with a huge number of transactions can cause DoS. Only small wallets will be enabled without API key.~~
-- A database structure for a quick calculation of unspent balance for mining addresses (about 10-50k coinbase transactions) ???
+- ~~A database structure for a quick calculation of unspent balance for mining addresses (about 10-50k coinbase transactions) ???~~
 - API documentation
