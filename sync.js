@@ -55,8 +55,9 @@ var p2p = require('bitcore-p2p');
 var Messages = p2p.Messages;
 var pool = new Pool({
   network: customNetwork,            // the network object
-  dnsSeed: false,                    // prevent seeding with DNS discovered known peers upon connecting
+  dnsSeed: false,                     // prevent seeding with DNS discovered known peers upon connecting
   listenAddr: true,                  // prevent new peers being added from addr messages
+  relay: true,
   maxSize: 1,
   addrs: CONFIG.trustedNodes
 });
@@ -71,6 +72,7 @@ var pool = new Pool({
 // initial empty blockchain parameters + connect the pool   //
 var bestIndex = 0;
 var bestHash = HASH0;
+// pool.listen();      // TODO both way comunication ?
 pool.connect();
 //////////////////////////////////////////////////////////////
 
@@ -94,8 +96,10 @@ function sendHeight() {
 
 
 //////////////////////////////////////////////////////////////
-// a blockchain initialization function                     //
+// Blockchain initialization function                       //
+//
 var wasInitialized = false;   // a workaroud to prevent multiple calling the initChain() function
+var syncFinished = false;
 function initChain() {
   if (wasInitialized)
     return;
@@ -110,7 +114,7 @@ function initChain() {
       database.search(dbBlocks, {i: (result-1)}, function(result2) {
         bestHash = result2._id;
         bestIndex = result2.i;
-        syncChain();
+        askHeaders();
       });
     }
   });
@@ -125,8 +129,8 @@ function makeNewDatabase() {
    var rawBlock = block.toBuffer();
    var tx = block.transactions[0];
    var tx_id = tx.hash;
-   var address = 'unknown';
-   var qGenesis = { _id: HASH0, i: 0, d: rawBlock, t: [ tx_id ], a: [ address ] };
+   var address = 'genesis';
+   var qGenesis = { _id: HASH0, i: 0, d: rawBlock, t: [ tx_id ], a: [ address ], b: [ {o_0_0: 0} ] };
    database.insertArray(dbBlocks, [qGenesis], function() {
      console.log('genesis block writen to the datadase');      // a debug line, can be deleted  
      database.createIndex(dbBlocks, { i: 1 }, function() {
@@ -135,7 +139,7 @@ function makeNewDatabase() {
          console.log('transactions indexed');      // a debug line, can be deleted  
          database.createIndex(dbBlocks, { a: 1 }, function() {
            console.log('addresses indexed');      // a debug line, can be deleted  
-           syncChain();
+           askHeaders();
          });
        });
      });
@@ -145,169 +149,125 @@ function makeNewDatabase() {
 
 
 //////////////////////////////////////////////////////////////
-// a function for a quick sync with the network             //
-var canSortBlocks = true;
-function syncChain() {
-  canSortBlocks = true;
-  console.log('best database index is '+bestIndex+' '+bestHash);  // a debug line, can be deleted  
-  sendHeight();
-  var starts = [bestHash];
+// requests only the block headers, it is a faster way to
+// sync (the 'headers first' method)
+//
+function askHeaders() {
   var messages = new Messages();
-  var message = messages.GetBlocks({starts: starts, stop: STOP});
-  pool.sendMessage(message);
+  var msg = messages.GetHeaders({starts: [bestHash], stop: STOP});
+  pool.sendMessage(msg);
+}
+//////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////
+// Create a block headers cache, assign indexes to block hashes.
+//
+var headCache = {};       // will be written to the database
+var hc = 0;               // a counter for headers
+var bc = 0;               // a full block counter
+function sortHeaders(headers) {
+  syncFinished = false;   // prevent an interruption by a new block received
+  headCache = {};         // clear the chache ?
+  var invs = [];          // used in p2p request for data
+  bc = 0;                 // clear the full block counter
+  headers.forEach( function(header) {
+    var prevHash = convHash(header.prevHash);
+    if (prevHash === bestHash) {
+      bestHash = header.hash;
+      bestIndex++;
+      headCache[prevHash] = { _id: bestHash, i: bestIndex };
+      var copybuf = new Buffer(bestHash, 'hex').reverse();
+      invs.push( {type: 2, hash: copybuf} );
+    }
+    else {
+      return treatFork();
+    }
+  });
+  askBlocks(invs);
 }
 //////////////////////////////////////////////////////////////
 
 
 //////////////////////////////////////////////////////////////
-// pool events                                              //
-// This event is emited when a peer in the pool is connected 
-// and ready for the comunication. When the first network node 
-// is ready, the function initChain() will be called.
-// To-do: find a better place for initChain() call to avoid 
-// multiple initialization. Temporary workaround - a global 
-// variable tested each time the function is called.
-pool.on('peerready', function(peer, message) {
-  console.log('a peer connected: ' + peer.host + ' ' + peer.version + ' ' + peer.subversion + ' ' + peer.bestHeight);  // a debug line, can be deleted  
-  initChain();  
-});
+// Send a p2p request for block data
+//
+function askBlocks(invs) {
+  var messages = new Messages();
+  var msg = messages.GetData(invs);
+  pool.sendMessage(msg);
+}
+//////////////////////////////////////////////////////////////
 
-// This evet is emited when a new peer is discovered in the network.
-// A ping test could be placed here for an automatioc selection 
-// of the best peer for sync. Also the height of peer copy of the
-// blockchain can be done here. Now only shows a debug information.
-pool.on('peeraddr', function(peer, message) {
-  console.log('a new peer addr found: ' + peer.host + ' ' + peer.version + ' ' + peer.subversion + ' ' + peer.bestHeight); // a debug line, can be deleted  
-});
 
-// This event is emited when the node receive the 'block' message.
-// Here the received blocks are stored in a temporary array
-// before saved into the database. This trick significantly
-// increase the blockchain sync, because the database operation
-// is the slowest step in the process. If the network peer for sync
-// is selected properly, the whole sync process takes place about 
-// 1 hour. It is much better than in the case legacy wallet sync, 
-// which usualy last a day or more. There is also the "headers-first"
-// method for sync, which was finished in my test within 2 minutes, 
-// however the algorithm was not stable, so left for a future upgrade.
-var blockCache = {};   // an pseudo-array for blocks temporary storage
-var treatCache = {};   // the second pseudo-array, in which the blocks are indexed
-var lastInv = 0;
+//////////////////////////////////////////////////////////////
+// This function is caaled if an incosistency in blockchain 
+// is detected. It simply deleted last several blocks from
+// the database and try to resync again.
+//
+function treatFork() {
+  console.log('a fork detected...');
+  pool.disconnect();
+  wasInitialized = false;
+  syncFinished = false;
+  var indexToDelete = bestIndex - 12;
+  if (indexToDelete <=0)
+    indexToDelete = 0;
+  database.erase(dbBlocks, {i: {$gt: indexToDelete}}, function () {
+    pool.connect();
+  });
+}
+//////////////////////////////////////////////////////////////
 
-pool.on('peerblock', function(peer, message) {
-  var block = message.block;
+
+//////////////////////////////////////////////////////////////
+// Add the block data to the cache.
+//
+function sortBlocks(block) {
   var header = block.header;
   var hash = header.hash;
   var prevHash = convHash(header.prevHash);
-  var rawBlock = block.toBuffer(); 
-  blockCache[prevHash] = {h: hash, d: rawBlock};
-  var intoCache = Object.keys(blockCache).length;
-  if ( (intoCache >= lastInv) && (canSortBlocks) ) {
-    console.log('limit of blocks reached ' + intoCache + '/' + lastInv);  // a debug message, can be deleted
-    treatCache = blockCache;    // move all block to the second array
-    blockCache = {};            // and empty the cache
-    indexBlocks();
+  var rawBlock = block.toBuffer();
+  if (headCache[prevHash]._id === hash) {
+    headCache[prevHash].d = rawBlock;
+    bc++;
   }
-});
-
-// This event is emited when an inventory message is received.
-// Can contain a new transaction id broadcasted to the network 
-// (message type 1), or block hashes (message type 2) eighter 
-// of new blocks broadcasted to the network or an answer to the
-// getBlocks message (up to 500 blocks at once). If the node
-// want to receive the data of those blocks/transactions, it
-// have to response by the getData message. For now the node
-// ignore the transaction messages. TO-DO: Treating those 
-// transaction-messages can be used to create the mempool
-// known in the conventional wallet/daemon.
-pool.on('peerinv', function(peer, message) {
-  var invs = message.inventory;
-  if (invs.length > 0)
-    if ((invs[0].type)==2) {
-      lastInv = invs.length;
-      var intoCache = Object.keys(blockCache).length;
-      console.log('got an inventory ' + invs.length + '/' + intoCache + ' sort: ' + canSortBlocks);  // a debug message, can be deleted
-      var messages = new Messages();
-      var msg = messages.GetData(invs);
-      peer.sendMessage(msg);
-    }
-});
-// TO-DO:
-// - ansver all other events to get a both dirrection communication
-//////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////
-// a loop for indexing of new blocks
-//
-function addIndexes(cache) {
-  var rts = [];
-  var cLen = Object.keys(cache).length;
-  console.log('now ' + cLen + ' blocks should be sorted...');  // a debug message, can be deleted
-  while (cache.hasOwnProperty(bestHash)) {
-    bestIndex++;
-    var newBestHash = cache[bestHash].h;
-    cache[bestHash].i = bestIndex;
-    rts.push({_id: newBestHash, i: bestIndex, d: cache[bestHash].d});
-    bestHash = newBestHash;
-  }
-  return rts;
+  if (bc === hc)
+    verifyBlocks();
 }
 //////////////////////////////////////////////////////////////
 
-
 //////////////////////////////////////////////////////////////
+// Write the indexed blocks to database and call the sync
+// procces continue
 //
-function pushBackNoIndex() {
-  var iBack = 0;
-  Object.keys(treatCache).forEach( function(key) {
-    if (!(treatCache[key].hasOwnProperty('i'))) {
-      if (!(blockCache.hasOwnProperty(key))) {
-        blockCache[key] = treatCache[key];
-        iBack++;
-      }
-    }
+function dbwriteBlocks(dbCache) {
+  console.log('write to db', dbCache.length);
+  database.insertArray(dbBlocks, dbCache, function() {
+    console.log('... blocks written to the database'); // a debug message, can be deleted
+    sendHeight();
+    askHeaders();
   });
-  console.log('... pushed back ' + iBack + ' blocks');
 }
 //////////////////////////////////////////////////////////////
 
-
 //////////////////////////////////////////////////////////////
-// A function for sorting the blocks in the cache and asign 
-// indexes. TO-DO: optimize the sort algorithm. Now it uses 
-// a brute-force method with n^2 loop passes. Theoretically
-// it should be sufficient n*log(n) passes, but it is not 
-// a critical factor, because it is much faster, than the 
-// following database operation.
-var orphanScore = 0;
-function indexBlocks() {
-  canSortBlocks = false;                // prevent another call until database operations are finished
-  var cLen = Object.keys(treatCache).length;
-  var queryI = addIndexes(treatCache);
-  queryI.forEach( function(item) {
-    decodeTransactions(item);  // decode address and transactions
+// A simple check the block data before database write.
+//
+function verifyBlocks() {
+  console.log('verify');
+  var dbCache = Object.values(headCache);
+  console.log('...');
+  var cl = dbCache.length;
+  var itisOK = (cl === hc);
+  dbCache.forEach( function (dbRec) {
+    itisOK = itisOK && dbRec.hasOwnProperty('_id') && dbRec.hasOwnProperty('i') && dbRec.hasOwnProperty('d');
+    if (itisOK)
+      decodeTransactions(dbRec);
+    else
+      return treatFork();          // something failed ?
   });
-  var qLen = queryI.length;
-  console.log('indexed ' + qLen + ' / ' + cLen  + ' blocks, orphanScore ' + orphanScore); // a debug message, can be deleted
-  // push back blocks without index
-  if ( !((lastInv == 1) && (qLen == 1) && (orphanScore == 0)) )    // clear the cache
-    pushBackNoIndex();
-  // write to database
-  if (qLen > 0) {
-    orphanScore = 0;
-    database.insertArray(dbBlocks, queryI, function() {
-      console.log('...' + (qLen) + ' blocks written to the database'); // a debug message, can be deleted
-      canSortBlocks = true;
-      syncChain();              // continue the sync by requesting a new package of blocks
-    });
-  }
-  else if ( (orphanScore > 3) || (lastInv > 1) ) {
-    resetPool();
-  }
-  else {
-    orphanScore++;
-    canSortBlocks = true;
-  }
+  console.log('OK');
+  dbwriteBlocks(dbCache);
 }
 //////////////////////////////////////////////////////////////
 
@@ -376,21 +336,137 @@ function decodeTransactions(bbRec) {
 
 
 //////////////////////////////////////////////////////////////
-// recovery from a fork
-function resetPool() {
-  pool.disconnect();
-  wasInitialized = false;
-  orphanScore=0;
-  canSortBlocks = false;
-  blockCache = {};
-  treatCache = {};
-  lastInv = 0;
-  var indexToDelete = bestIndex - 12;
-  if (indexToDelete <=0)
-    indexToDelete = 0;
-  database.erase(dbBlocks, {i: {$gt: indexToDelete}}, function () {
-    pool.connect();
-  });
-}
+// the pool evene to treat the received block headers data
+//
+pool.on('peerheaders', function(peer, message) {
+  hc = message.headers.length;   // set the header counter
+  console.log('peerheaders', hc, bestIndex);
+  if (hc > 0) 
+    sortHeaders(message.headers);
+  else
+    syncFinished = true;
+});
 //////////////////////////////////////////////////////////////
 
+
+//////////////////////////////////////////////////////////////
+// Pool event to treat the block data
+//
+pool.on('peerblock', function(peer, message) {
+//  console.log('peerblock', bc);
+  sortBlocks(message.block);
+});
+
+//////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
+// A New peer peer connected to the network 
+//
+pool.on('peeraddr', function(peer, message) {
+  console.log('a new peer addr found: ' + peer.host + ' ' + peer.version + ' ' + peer.subversion + ' ' + peer.bestHeight); // a debug line, can be deleted  
+});
+//////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////
+// The pool is ready, start the sync process
+//
+pool.on('peerready', function(peer, message) {
+  console.log('a peer connected: ' + peer.host + ' ' + peer.version + ' ' + peer.subversion + ' ' + peer.bestHeight);  // a debug line, can be deleted  
+  initChain();
+});
+//////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////
+// A peer disconnected. Nothing need to do, pool connect
+// another automatically
+//
+pool.on('peerdisconnect', function(peer, message) {
+  console.log('peerdisconnect');
+});
+//////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////
+// A new block has been announced -> ask for it, but only
+// if the initial sync finished.
+//
+pool.on('peerinv', function(peer, message) {
+  console.log('peerinv');
+  if ( (message.inventory[0].type == 2) && (syncFinished) )
+    askHeaders();
+});
+//////////////////////////////////////////////////////////////
+
+
+/*
+///  unused pool messages. 
+// TODO use for the both dirrection comunication
+
+pool.on('peerversion', function(peer, message) {
+  console.log('peerversion');
+//  console.log(message);
+});
+
+
+pool.on('peergetdata', function(peer, message) {
+  console.log('peergetdata');
+});
+
+
+pool.on('peerping', function(peer, message) {
+  console.log('peerping');
+//  console.log(message);
+});
+
+
+pool.on('peerpong', function(peer, message) {
+  console.log('peerpong');
+});
+
+
+pool.on('peerverack', function(peer, message) {
+  console.log('peerverack');
+});
+
+
+pool.on('peeralert', function(peer, message) {
+  console.log('peeralert');
+});
+
+pool.on('peermerkleblock', function(peer, message) {
+  console.log('peermerkleblock');
+});
+
+pool.on('peertx', function(peer, message) {
+  console.log('peertx');
+});
+
+pool.on('peergetblocks', function(peer, message) {
+  console.log('peergetblocks');
+});
+
+pool.on('peergetheaders', function(peer, message) {
+  console.log('peergetheaders');
+  var reqStarts = message.starts;
+  reqStarts.forEach( function(req) {
+    console.log(convHash(req));
+  });
+});
+
+pool.on('peererror', function(peer, message) {
+  console.log('peererror');
+});
+
+pool.on('peerfilterload', function(peer, message) {
+  console.log('peerfilterload');
+});
+
+pool.on('peerfilteradd', function(peer, message) {
+  console.log('peerfilteradd');
+});
+
+pool.on('peerfilterclear', function(peer, message) {
+  console.log('peerfilterclear');
+});
+
+*/

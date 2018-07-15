@@ -204,6 +204,7 @@ console.log(command, param);
       break;
     case 'getheight':
     case 'height':
+    case 'getblockcount':
       showHeight(res);
       break;
     case 'getblock':
@@ -230,6 +231,29 @@ console.log(command, param);
       break;
     case 'txbyaddr':
       showTxByAddr(res, param);
+      break;
+    case 'getdifficulty':
+    case 'difficulty':
+      showDifficulty(res);
+      break;
+    case 'getblockhash':
+    case 'blockhash':
+      showBlockHash(res, param);
+      break;
+    case 'getblockheight':
+    case 'getblockindex':
+    case 'blockheight':
+    case 'blockindex':
+      showBlockHeight(res, param);
+      break;
+    case 'getrawblock':
+    case 'rawblock':
+      showRawBlock(res, param);
+      break;
+    case 'getrawtransaction':
+    case 'rawtransaction':
+    case 'rawtx':
+      showRawTx(res, param);
       break;
     default:
       res.end('{"error": "unknown request"}');
@@ -261,6 +285,96 @@ function showHelp(res) {
   res.end(JSON.stringify(rts));
 }
 //////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
+// API command to show a raw block data
+//
+function showRawBlock(res, param) {
+  if (param === '')
+    param = bestIndex;
+  var index = Number(param);
+  var query = ((!(isNaN(param))) && Number.isInteger(index)) ? {i: index} : {_id: param};
+  database.search(dbBlocks, query, function(rts) {
+    if (rts)
+      res.end(JSON.stringify(rts.d.buffer.toString('hex')));
+    else
+      res.end(JSON.stringify({error: 'not found'}));
+  });
+}
+//////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
+// API command to show a raw block data
+//
+function showRawTx(res, param) {
+  if (param === '') {
+    res.end(JSON.stringify({error: 'not found'}));
+    return; 
+  }
+  var query =  {t: param};
+  database.search(dbBlocks, query, function(rts) {
+    if (rts) {
+      block = Block.fromBuffer(rts.d.buffer);
+      var i=0;
+      while (block.transactions[i].hash != param)
+        i++;
+      res.end(JSON.stringify(block.transactions[i].toString('hex')));
+    }
+    else
+      res.end(JSON.stringify({error: 'not found'}));
+  });
+}
+//////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
+// API command to show the current minning difficulty
+//
+function showDifficulty(res) {
+  var param = bestIndex;
+  getBlock(param, function(response) {
+    if (response.hasOwnProperty('difficulty'))
+      res.end(JSON.stringify(response.difficulty));
+    else
+      res.end(JSON.stringify(response));
+  });
+}
+//////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
+// API command to show a block hash
+//
+function showBlockHash(res, param) {
+  if (param === '')
+    param = bestIndex;
+  getBlock(param, function(response) {
+    if (response.hasOwnProperty('hash'))
+      res.end(JSON.stringify(response.hash));
+    else
+      res.end(JSON.stringify(response));
+  });
+}
+//////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
+// API command to show a block height
+//
+function showBlockHeight(res, param) {
+  if (param === '')
+    param = bestIndex;
+  getBlock(param, function(response) {
+    if (response.hasOwnProperty('height'))
+      res.end(JSON.stringify(response.height));
+    else
+      res.end(JSON.stringify(response));
+  });
+}
+//////////////////////////////////////////////////////////////	
+
 
 //////////////////////////////////////////////////////////////
 // API command to show the current height of the blockchain
@@ -369,56 +483,58 @@ function showTxInfo(res, param) {
 // passed in rts and return info on the transaction in JSON format.  
 //
 function getTxInfo(rts, param) {
-  var block = Block.fromBuffer(rts.d.buffer);
-  var txs = block.transactions;
-  var txIndex = 0;
-  while (txIndex < txs.length) {
-    if (txs[txIndex].hash === param) {
-      var tx = txs[txIndex];
-      var response = {
-        txid: tx.hash,
-        version: tx.version,
-        locktime: tx.nLockTime,
-        block: rts.i,
-        index: txIndex,
-        timestamp: block.header.time,
-        confirmations: (bestIndex+1-rts.i),
-        inputs: [],
-        outputs: []
-      };
-      if ( (tx.version == 2) && (tx.txComment) ) {
-        response.txComment = tx.txComment.toString();
+  if (rts.i > 0) {
+    var block = Block.fromBuffer(rts.d.buffer);
+    var txs = block.transactions;
+    var txIndex = 0;
+    while (txIndex < txs.length) {
+      if (txs[txIndex].hash === param) {
+        var tx = txs[txIndex];
+        var response = {
+          txid: tx.hash,
+          version: tx.version,
+          locktime: tx.nLockTime,
+          block: rts.i,
+          index: txIndex,
+          timestamp: block.header.time,
+          confirmations: (bestIndex+1-rts.i),
+          inputs: [],
+          outputs: []
+        };
+        if ( (tx.version == 2) && (tx.txComment) ) {
+          response.txComment = tx.txComment.toString();
+        }
+        var inputs = tx.inputs;
+        var item;
+        inputs.forEach(function(input) {
+          var prevTxId = input.prevTxId.toString('hex');
+          if (prevTxId == COINBASE) {
+            item = {received_from: 'coinbase'};
+            response.inputs.push(item);
+          }
+          else {
+            var address = inputAddress(input);
+            var txPrevId = input.prevTxId.toString('hex');
+            var n = input.outputIndex;
+            item = {addr: address, received_from: {tx: txPrevId, n: n}};
+            response.inputs.push(item);
+          }
+        });
+        var outputs = tx.outputs;
+        outputs.forEach(function(output) { 
+          var address = outputAddress(output);
+          var amount = (output.satoshis)/SAT;
+          var script  = output.script.toBuffer().toString('hex');
+          var item = {addr: address, amount: amount, script: script};
+          response.outputs.push(item);
+        });
+        return response;
       }
-      var inputs = tx.inputs;
-      var item;
-      inputs.forEach(function(input) {
-        var prevTxId = input.prevTxId.toString('hex');
-        if (prevTxId == COINBASE) {
-          item = {received_from: 'coinbase'};
-          response.inputs.push(item);
-        }
-        else {
-          var address = inputAddress(input);
-          var txPrevId = input.prevTxId.toString('hex');
-          var n = input.outputIndex;
-          item = {addr: address, received_from: {tx: txPrevId, n: n}};
-          response.inputs.push(item);
-        }
-      });
-      var outputs = tx.outputs;
-      outputs.forEach(function(output) { 
-        var address = outputAddress(output);
-        var amount = (output.satoshis)/SAT;
-        var script  = output.script.toBuffer().toString('hex');
-        var item = {addr: address, amount: amount, script: script};
-        response.outputs.push(item);
-      });
-      return response;
+      txIndex++;
     }
-    txIndex++;
   }
   return {error: "unknown"};   // The code never should got here, but for a safety. 
-}
+} 
 //////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////
@@ -454,7 +570,7 @@ function showBalance(res, param) {
   }
   var query = { a: param };
   database.searchMore(dbBlocks, query, function(rts) {
-    if (!rts) {
+    if (rts.length === 0) {
       res.end('{"error": "unknown address requested"}');
       return;
     }
@@ -477,7 +593,7 @@ function showAddrInfo(res, param) {
   }
   var query = { a: param };
   database.searchMore(dbBlocks, query, function(rts) {
-    if (!rts) {
+    if (rts.length === 0) {
       res.end('{"error": "unknown address requested"}');
       return;
     }
@@ -856,8 +972,11 @@ function exFind(res, param) {
 //
 function exHelp(res) {
   exHeader(res);
-  res.write('Place here the API documentation...');
-  exFooter(res);
+  var apidocread = '';
+  fs.readFile('./src/apidoc.inc', 'utf8', function (err, data) {
+    res.write(data);
+    exFooter(res);
+  });
 }
 //////////////////////////////////////////////////////////////
 
@@ -971,8 +1090,10 @@ function exBlock(param, found) {
   var blockRecord = found[0];       // block should always be unicate
   var block = Block.fromBuffer(blockRecord.d.buffer);
   var response = '<H3>Details of block ' + param + '</H1><HR><table width="100%">';
-  response+= '<tr><td width="25%">Hash</td><td width="75%">' + '<A href="find?q='+ (blockRecord.i-1);
-  response+='"> <B>&lt;&lt;</B> </A> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ' + blockRecord._id;
+  response+= '<tr><td width="25%">Hash</td><td width="75%">' 
+  if (blockRecord.i > 0) 
+    response+= '<A href="find?q='+ (blockRecord.i-1) + '"> <B>&lt;&lt;</B> </A>';
+  response+='&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ' + blockRecord._id;
   if (blockRecord.i < bestIndex)
     response+= ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <A href="find?q='+ (blockRecord.i+1) +'"> <B>&gt;&gt;</B> </A>';
   response+= '</td></tr>';
@@ -985,6 +1106,10 @@ function exBlock(param, found) {
   response+= '<tr><td>Date/Time</td><td>'+ dstr + '</td></tr>';
   response+= '<tr><td>Count of transactions</td><td>' + block.transactions.length;
   response+= '<font color="gray"> (size ' + parseInt(Math.round(blockRecord.d.buffer.length/102.4))/10 + ' kB) </font></td></tr>';
+  if (blockRecord.i === 0) {
+    response+= '</table><font color="red">This is the genesis block.</font>'
+    return response;
+  }
   var valueOut = 0;
   var valuesOut = [];
   var txHashes = [];
@@ -1001,6 +1126,7 @@ function exBlock(param, found) {
       condPush(txFrom, inputAddress(input) );
     });
     txFroms.push(txFrom);
+    console.log(tx.outputs[0]);
     tx.outputs.forEach( function(output) {
       txValue += output.satoshis;
       txAmount.push(output.satoshis);
@@ -1068,6 +1194,10 @@ function exTx(param, found) {
   response+= '<tr><td>Count of Inputs</td><td>' + txs[i].inputs.length + '</td></tr>';
   response+= '<tr><td>Count of Outputs</td><td>' + txs[i].outputs.length + '</td></tr>';
   response+= '<tr><td>Block Time</td><td>'+ timeToISO(block.header.time) + '</td></tr>';
+  if (blockRecord.i === 0) {
+    response+= '</table><font color="red">This is a pseudo-transaction in the genesis block.</font>'
+    return response;
+  }
   response+= '</table><table width="100%" border="1">';
   response+= '<tr><td width="45%" align="center">Input Addresses</td>';
   response+= '<td width="45%" align="center">Output Addresses</td>';
