@@ -137,5 +137,5 @@ The addresses with too much transactions (e.g. a mining pool addresses) are prot
 and due to the complexity of the calculation, the result will not be shown.<br>   
 Example:<br> 
 <code>http://explorer.yourdomain.com:3000/api/txbyaddr/eW1mCXiSfy4HfuBhVRfQ4kedviUcRLZd3T</code><br>
-<code>http://explorer.yourdomain.com:3000/api/txbyaddr/eW1mCXiSfy4HfuBhVRfQ4kedviUcRLZd3T/10/5</code><br>
+<code>http://explorer.yourdomain.com:3000/api/txbyaddr/eW1mCXiSfy4HfuBhVRfQ4kedviUcRLZd3T/10/20</code><br>
 <br>
