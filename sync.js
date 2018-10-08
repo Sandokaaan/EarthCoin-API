@@ -10,6 +10,14 @@ var CONFIG = JSON.parse(JSON.minify(fs.readFileSync('./config.json', {encoding: 
 console.log('config load from main');
 //////////////////////////////////////////////////////////////
 
+//////////////////////////////////////////////////////////////
+// kill self and restart every 5 minutes
+setTimeout(function () {
+  console.log('I am bored...let us restart');
+  process.exit();
+}, 5*60*1000)
+//////////////////////////////////////////////////////////////
+
 
 /////////////////////////////////////////////////////////////
 // shared functions from utils.js
@@ -170,20 +178,24 @@ function sortHeaders(headers) {
   headCache = {};         // clear the chache ?
   var invs = [];          // used in p2p request for data
   bc = 0;                 // clear the full block counter
+  var fork = false;
   headers.forEach( function(header) {
     var prevHash = convHash(header.prevHash);
     if (prevHash === bestHash) {
       bestHash = header.hash;
       bestIndex++;
       headCache[prevHash] = { _id: bestHash, i: bestIndex };
-      var copybuf = new Buffer(bestHash, 'hex').reverse();
+      var copybuf = Buffer.from(bestHash, 'hex').reverse();
       invs.push( {type: 2, hash: copybuf} );
     }
     else {
-      return treatFork();
+      fork = true;
     }
   });
-  askBlocks(invs);
+  if (!fork)
+    askBlocks(invs);
+  else
+    treatFork();
 }
 //////////////////////////////////////////////////////////////
 
@@ -259,15 +271,21 @@ function verifyBlocks() {
   console.log('...');
   var cl = dbCache.length;
   var itisOK = (cl === hc);
+  var fork = false;
   dbCache.forEach( function (dbRec) {
     itisOK = itisOK && dbRec.hasOwnProperty('_id') && dbRec.hasOwnProperty('i') && dbRec.hasOwnProperty('d');
     if (itisOK)
       decodeTransactions(dbRec);
     else
-      return treatFork();          // something failed ?
+      fork  = true;
   });
-  console.log('OK');
-  dbwriteBlocks(dbCache);
+  if (!fork) {
+    dbwriteBlocks(dbCache);
+  }
+  else {
+    console.log('fork detected');
+    treatFork();          // something failed ?
+  }
 }
 //////////////////////////////////////////////////////////////
 

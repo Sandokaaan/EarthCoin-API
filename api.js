@@ -197,6 +197,8 @@ function responseAPIrequest(res, commands) {
   var nParams = commands.length;
   var command = (nParams == 0) ? 'help' : safeString(commands[0]);
   var param = (nParams > 1) ? safeString(commands[1]) : '';
+  var pfrom = (nParams > 2) ? safeString(commands[2]) : '';
+  var pto = (nParams > 3) ? safeString(commands[3]) : '';
 console.log(command, param);
   switch(command) {
     case 'help':
@@ -230,7 +232,7 @@ console.log(command, param);
       showUnspent(res, param);
       break;
     case 'txbyaddr':
-      showTxByAddr(res, param);
+      showTxByAddr(res, param, pfrom, pto);
       break;
     case 'getdifficulty':
     case 'difficulty':
@@ -682,7 +684,7 @@ function findUnspent(blocks, param) {
 // API call for detailed list of input and output transactions
 // on an address.  
 //
-function showTxByAddr(res, param) {
+function showTxByAddr(res, param, pf, pt) {
   if (param == '') {
     res.end('{"error": "unknown address requested"}');
     return;
@@ -699,7 +701,19 @@ function showTxByAddr(res, param) {
       return;
     }
     findAllTx(rts, param, function(response) {
-      res.end(JSON.stringify(response));
+      response.reverse();
+      if ((pf == '') || (pt == ''))
+        res.end(JSON.stringify(response));
+      else {
+        var filtered = [];
+        var i=0;
+        response.forEach( function(ri) {
+          if ((i>=pf) && (i<=pt))
+            filtered.push(ri);
+          i++;
+        });
+        res.end(JSON.stringify(filtered));
+      }
     });
   });
 }
@@ -731,6 +745,35 @@ function findAllTx(blocks, param, callBack) {
         block_time: block.header.time
       };
       var txInfo;
+
+      // transaction details on DEV request
+      var txDetails = {
+        inputs: [],
+        outputs: []
+      };
+      var item;
+      tx.inputs.forEach(function(input) {
+        var prevTxId = input.prevTxId.toString('hex');
+        if (prevTxId == COINBASE) {
+          item = {received_from: 'coinbase'};
+          txDetails.inputs.push(item);
+        }
+        else {
+          var address = inputAddress(input);
+          var txPrevId = input.prevTxId.toString('hex');
+          var n = input.outputIndex;
+          item = {addr: address, received_from: {tx: txPrevId, n: n}};
+          txDetails.inputs.push(item);
+        }
+      });
+      tx.outputs.forEach(function(output) { 
+        var address = outputAddress(output);
+        var amount = (output.satoshis)/SAT;
+        var script  = output.script.toBuffer().toString('hex');
+        var item = {addr: address, amount: amount, script: script};
+        txDetails.outputs.push(item);
+      });
+
       if (doid.typ == 'o') {
         var id =  tx.hash + '_' + doid.oi;
         tx.inputs.forEach( function(input) {
@@ -741,12 +784,13 @@ function findAllTx(blocks, param, callBack) {
           tx_index: doid.ti,
           tx_comment: tx.txComment,
           tx_output_index: doid.oi,
-          confirmations: bestIndex - blockRecord.i
+          confirmations: bestIndex - blockRecord.i,
+          details: txDetails
         };
         var fromInfo = {
           source: srcAddrs,
           block: blockInfo,
-          transaction: txInfo 
+          transaction: txInfo
         };
         txo[id] = {
           value: b[c],
@@ -768,7 +812,8 @@ function findAllTx(blocks, param, callBack) {
           tx_index: doid.ti,
           tx_comment: tx.txComment,
           tx_input_index: doid.oi,
-          confirmations: bestIndex - blockRecord.i
+          confirmations: bestIndex - blockRecord.i,
+          details: txDetails
         };
         var spentInTx = {
           target: toAddrs,
