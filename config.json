@@ -1,25 +1,25 @@
 {
   "coinName": "EarthCoin",
   "ticker": "EAC",
-  "nodeID": "explorer.eac",          /* IP address or domain name of this server*/
+  "nodeID": "explorer.eac", /* IP address or domain name of this server*/
   "network": {
     "name": "earthcoin",
     "alias": "eacnet",
-    "pubkeyhash": 93,                /* 0x5d in hexadecimal */
-    "privatekey": 221,               /* 0xdd in hexadecimal */
+    "pubkeyhash": 93, /* 0x5d in hexadecimal */
+    "privatekey": 221, /* 0xdd in hexadecimal */
     "scripthash": 5,
-    "xpubkey": 76067358,             /* 0x0488b21e in hexadecimal */
-    "xprivkey": 76066276,            /* 0x0488ade4 in hexadecimal */
-    "networkMagic": 3235639805,      /* 0xc0dbf1fd in hexadecimal */
+    "xpubkey": 76067358, /* 0x0488b21e in hexadecimal */
+    "xprivkey": 76066276, /* 0x0488ade4 in hexadecimal */
+    "networkMagic": 3235639805, /* 0xc0dbf1fd in hexadecimal */
     "port": 35677,
     "dnsSeeds": []
   },
-  "blockchain" : {                   /* hash and raw block data of block # 0 */
+  "blockchain": { /* hash and raw block data of block # 0 */
     "genesisHash": "21717d4df403301c0538f1cb9af718e483ad06728bbcd8cc6c9511e2f9146ced",
     "genesisBlock": "010000000000000000000000000000000000000000000000000000000000000000000000b14b5c80816e64e616a2abb5e5b0396394817f4df0c12a4591184110367c75133811a852f0ff0f1e383fbe000102000000010000000000000000000000000000000000000000000000000000000000000000ffffffff6204ffff001d01044c5920446563656d6265722031392c20323031332097204172726573742c2073747269702d736561726368206f6620496e6469616e206469706c6f6d617420696e204e657720596f726b207472696767657273207570726f61722effffffff010000000000000000434104dcba12349012341234900abcd12223abcd455abcd77788abcd000000aaaaabbbbbcccccdddddeeeeeff00ff00ff00ff001234567890abcdef0022446688abc11ac0000000000",
     "nullHash": "0000000000000000000000000000000000000000000000000000000000000000"
   },
-  "trustedNodes" : [
+  "trustedNodes": [
     { "ip": {"v4": "5.9.10.66"} },
     { "ip": {"v4": "46.28.107.182"} },
     { "ip": {"v4": "47.100.119.161"} },
@@ -36,5 +36,12 @@
   "dbPort": 27017,                   /* port number of Mongodb server, default 27017 */
   "dbName": "dbEarthCoin",           /* name of database*/
   "dbBlocks": "blocks",              /* name of main table in the database */
-  "dbLimit": 10000                   /* protect against database DoS by quering a large wallet balance */
+  "dbLimit": 10000,                   /* protect against database DoS by quering a large wallet balance */
+  "rpc": {
+    "protocol": "http",
+    "user": "earthcoinrpc",
+    "pass": "Fto5gerqRsQi",
+    "host": "47.88.218.10",
+    "port": "15678"
+  }
 }
