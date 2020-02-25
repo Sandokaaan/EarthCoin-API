@@ -3,11 +3,11 @@
 //
 var fs = require('fs');
 JSON.minify = JSON.minify || require('node-json-minify');
-if (!fs.existsSync('./config.json')) {
-  console.log('config.json file does not exist. Read the installation/setup instructions.');
-  return;
+if (!fs.existsSync('./config.json')){
+    console.log('config.json file does not exist. Read the installation/setup instructions.');
+    return;
 }
-var CONFIG = JSON.parse(JSON.minify(fs.readFileSync('./config.json', { encoding: 'utf8' })));
+var CONFIG = JSON.parse(JSON.minify(fs.readFileSync('./config.json', {encoding: 'utf8'})));
 console.log('config load from api');
 //////////////////////////////////////////////////////////////
 
@@ -17,13 +17,13 @@ console.log('config load from api');
 // a way to send some info to api proccess
 //
 var bestIndex = 0;
-var ipc = require('node-ipc');
+var ipc=require('node-ipc');
 ipc.config.id = 'sandonodeapi';
-ipc.config.retry = 1500;
+ipc.config.retry= 1500;
 ipc.config.silent = true;
 function connectIPC() {
-  ipc.connectTo('sandonodesync', function () {
-    ipc.of.sandonodesync.on('height', function (data, socket) {
+  ipc.connectTo('sandonodesync', function() {
+    ipc.of.sandonodesync.on('height', function(data,socket) {
       bestIndex = data;
       console.log('got height ', bestIndex);
     });
@@ -36,7 +36,7 @@ connectIPC();
 /////////////////////////////////////////////////////////////
 // shared functions from utils.js
 //
-var utils = require('./lib/utils');
+var utils =  require('./lib/utils');
 var convHash = utils.convHash;
 var outputAddress = utils.outputAddress;
 var inputAddress = utils.inputAddress;
@@ -46,7 +46,7 @@ var inputAddress = utils.inputAddress;
 //////////////////////////////////////////////////////////////
 // a simple database interface                              //
 //
-var database = require('./lib/database');
+var database =  require('./lib/database');
 var dbBlocks = CONFIG.dbBlocks;
 //////////////////////////////////////////////////////////////
 
@@ -54,8 +54,8 @@ var dbBlocks = CONFIG.dbBlocks;
 //////////////////////////////////////////////////////////////
 // an initial database query on block height
 //
-database.searchCount(dbBlocks, {}, function (result) {
-  bestIndex = (result - 1);
+database.searchCount(dbBlocks, {}, function(result) {
+  bestIndex = (result-1);
 });
 //////////////////////////////////////////////////////////////
 
@@ -63,13 +63,13 @@ database.searchCount(dbBlocks, {}, function (result) {
 //////////////////////////////////////////////////////////////
 // web interface
 //
-var apiPort = CONFIG.apiPort;
+var apiPort = CONFIG.apiPort;                                      
 var http = require('http');
 console.log('Web server started...');      // a debug message, can be deleted
 http.createServer(function (req, res) {
   console.log('URL request: ' + req.url);  // a debug message, can be deleted
   var url = req.url;
-  var commands = url.replace(/\/\s*$/, '').split('/');
+  var commands = url.replace(/\/\s*$/,'').split('/');
   commands.shift();
   if (commands[0] === 'api') {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -77,7 +77,7 @@ http.createServer(function (req, res) {
     res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, GET');
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.writeHead(200, {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
       'X-Powered-By': 'sando'
     });
     commands.shift();
@@ -85,7 +85,7 @@ http.createServer(function (req, res) {
   }
   else {
     responseExplorer(res, commands);
-  }
+  }  
 }).listen(apiPort);
 //////////////////////////////////////////////////////////////
 
@@ -119,7 +119,7 @@ function safeString(s) {
 // 
 function safeCommand(s) {
   var cl = s.length;
-  var command = (cl == 0) ? 'main' : s[0].substring(0, 4).replace(/\W/g, '');
+  var command = (cl == 0) ? 'main' : s[0].substring(0,4).replace(/\W/g, '');
   return command;
 }
 //////////////////////////////////////////////////////////////
@@ -140,7 +140,7 @@ function safeParam(s) {
 // Calculate a difference between now and a past timestamp in minutes.
 //
 function calcAge(time) {
-  var dif = Math.round((Math.floor(Date.now()) / 1000 - time) / 6) / 10;
+  var dif = Math.round((Math.floor(Date.now())/1000 - time)/6)/10;
   return dif;
 }
 //////////////////////////////////////////////////////////////
@@ -150,7 +150,7 @@ function calcAge(time) {
 //
 function timeToISO(time) {
   var newDate = new Date();
-  newDate.setTime(time * 1000);
+  newDate.setTime(time*1000);
   var dstr = newDate.toISOString().replace('T', ' ').substring(0, 19);
   return dstr;
 }
@@ -161,7 +161,7 @@ function timeToISO(time) {
 //  
 function condPush(list, item) {
   var isIn = false;
-  for (var i = 0; i < list.length; i++) {
+  for (var i=0; i<list.length; i++) {
     if (list[i] === item) {
       isIn = true;
       break;
@@ -180,7 +180,7 @@ function condPush(list, item) {
 //
 function DEOID(oid) {
   var arr = oid.split('_');
-  return { typ: arr[0], ti: Number(arr[1]), oi: Number(arr[2]) };
+  return {typ: arr[0], ti: Number(arr[1]), oi: Number(arr[2])};
 }
 //////////////////////////////////////////////////////////////
 
@@ -197,10 +197,8 @@ function responseAPIrequest(res, commands) {
   var nParams = commands.length;
   var command = (nParams == 0) ? 'help' : safeString(commands[0]);
   var param = (nParams > 1) ? safeString(commands[1]) : '';
-  var pfrom = (nParams > 2) ? safeString(commands[2]) : '';
-  var pto = (nParams > 3) ? safeString(commands[3]) : '';
-  console.log(command, param);
-  switch (command) {
+console.log(command, param);
+  switch(command) {
     case 'help':
       showHelp(res);
       break;
@@ -232,7 +230,7 @@ function responseAPIrequest(res, commands) {
       showUnspent(res, param);
       break;
     case 'txbyaddr':
-      showTxByAddr(res, param, pfrom, pto);
+      showTxByAddr(res, param);
       break;
     case 'getdifficulty':
     case 'difficulty':
@@ -251,10 +249,6 @@ function responseAPIrequest(res, commands) {
     case 'getrawblock':
     case 'rawblock':
       showRawBlock(res, param);
-      break;
-    case 'getsendrawtransaction':
-    case 'sendrawtransaction':
-      sendrawtransaction(res, param);
       break;
     case 'getrawtransaction':
     case 'rawtransaction':
@@ -300,12 +294,12 @@ function showRawBlock(res, param) {
   if (param === '')
     param = bestIndex;
   var index = Number(param);
-  var query = ((!(isNaN(param))) && Number.isInteger(index)) ? { i: index } : { _id: param };
-  database.search(dbBlocks, query, function (rts) {
+  var query = ((!(isNaN(param))) && Number.isInteger(index)) ? {i: index} : {_id: param};
+  database.search(dbBlocks, query, function(rts) {
     if (rts)
       res.end(JSON.stringify(rts.d.buffer.toString('hex')));
     else
-      res.end(JSON.stringify({ error: 'not found' }));
+      res.end(JSON.stringify({error: 'not found'}));
   });
 }
 //////////////////////////////////////////////////////////////
@@ -316,20 +310,20 @@ function showRawBlock(res, param) {
 //
 function showRawTx(res, param) {
   if (param === '') {
-    res.end(JSON.stringify({ error: 'not found' }));
-    return;
+    res.end(JSON.stringify({error: 'not found'}));
+    return; 
   }
-  var query = { t: param };
-  database.search(dbBlocks, query, function (rts) {
+  var query =  {t: param};
+  database.search(dbBlocks, query, function(rts) {
     if (rts) {
       block = Block.fromBuffer(rts.d.buffer);
-      var i = 0;
+      var i=0;
       while (block.transactions[i].hash != param)
         i++;
       res.end(JSON.stringify(block.transactions[i].toString('hex')));
     }
     else
-      res.end(JSON.stringify({ error: 'not found' }));
+      res.end(JSON.stringify({error: 'not found'}));
   });
 }
 //////////////////////////////////////////////////////////////
@@ -340,7 +334,7 @@ function showRawTx(res, param) {
 //
 function showDifficulty(res) {
   var param = bestIndex;
-  getBlock(param, function (response) {
+  getBlock(param, function(response) {
     if (response.hasOwnProperty('difficulty'))
       res.end(JSON.stringify(response.difficulty));
     else
@@ -356,7 +350,7 @@ function showDifficulty(res) {
 function showBlockHash(res, param) {
   if (param === '')
     param = bestIndex;
-  getBlock(param, function (response) {
+  getBlock(param, function(response) {
     if (response.hasOwnProperty('hash'))
       res.end(JSON.stringify(response.hash));
     else
@@ -372,7 +366,7 @@ function showBlockHash(res, param) {
 function showBlockHeight(res, param) {
   if (param === '')
     param = bestIndex;
-  getBlock(param, function (response) {
+  getBlock(param, function(response) {
     if (response.hasOwnProperty('height'))
       res.end(JSON.stringify(response.height));
     else
@@ -381,23 +375,12 @@ function showBlockHeight(res, param) {
 }
 //////////////////////////////////////////////////////////////	
 
-var RpcClient = require('bitcoind-rpc');
-var rpc = new RpcClient(CONFIG.rpc);
 
-function sendrawtransaction(res, param) {
-  if (param == '') {
-    res.end('{"error": "unknown tx requested"}');
-    return;
-  }
-  rpc.sendrawtransaction(param,function (err, ret) {
-    res.end(JSON.stringify(ret));
- })  
-}
 //////////////////////////////////////////////////////////////
 // API command to show the current height of the blockchain
 //
 function showHeight(res) {
-  var rts = JSON.stringify({ height: bestIndex });
+  var rts = JSON.stringify({height: bestIndex});
   res.end(rts);
 }
 //////////////////////////////////////////////////////////////
@@ -407,9 +390,9 @@ function showHeight(res) {
 // it will show the latest block.
 //
 function showBlock(res, param) {
-  if (param == '')
+  if (param == '') 
     param = bestIndex;
-  getBlock(param, function (response) {
+  getBlock(param, function(response) {
     res.end(JSON.stringify(response));
   });
 }
@@ -425,17 +408,17 @@ function showBlock(res, param) {
 //
 function getBlock(param, callBack) {
   var index = Number(param);
-  var query = ((!(isNaN(param))) && Number.isInteger(index)) ? { i: index } : { _id: param };
-  database.search(dbBlocks, query, function (rts) {
+  var query = ((!(isNaN(param))) && Number.isInteger(index)) ? {i: index} : {_id: param};
+  database.search(dbBlocks, query, function(rts) {
     if (!rts) {
       console.log('API asked invalid block ');           // a debug message, can be deleted
-      callBack({ error: "unknown block requested" });
+      callBack({error: "unknown block requested"});
       return;
     }
     var response;
     if (!(rts.d)) {
       console.log('API asked non-indexed block ');       // a debug message, can be deleted
-      response = { hash: rts.h, indexed: false };          // theoretically should never happen ?
+      response = {hash: rts.h, indexed: false};          // theoretically should never happen ?
       callBack(response);
       return;
     }
@@ -445,9 +428,9 @@ function getBlock(param, callBack) {
     var transactions = block.transactions;
     var txs = [];
     var totalOutput = 0;
-    transactions.forEach(function (tx) {
+    transactions.forEach(function(tx) {
       txs.push(tx.hash);
-      tx.outputs.forEach(function (output) {
+      tx.outputs.forEach( function(output) {
         totalOutput += output.satoshis;
       });
     });
@@ -463,7 +446,7 @@ function getBlock(param, callBack) {
       valueout: totalOutput,
       created: created,
       time: header.time,
-      nonce: header.nonce,
+      nonce: header.nonce, 
       bits: header.bits.toString(16),
       difficulty: header.getDifficulty(),
       previousblockhash: convHash(header.prevHash)
@@ -484,7 +467,7 @@ function showTxInfo(res, param) {
     return;
   }
   var query = { t: param };
-  database.search(dbBlocks, query, function (rts) {
+  database.search(dbBlocks, query, function(rts) {
     if (!rts) {
       res.end('{"error": "unknown transaction requested"}');
       return;
@@ -514,35 +497,35 @@ function getTxInfo(rts, param) {
           block: rts.i,
           index: txIndex,
           timestamp: block.header.time,
-          confirmations: (bestIndex + 1 - rts.i),
+          confirmations: (bestIndex+1-rts.i),
           inputs: [],
           outputs: []
         };
-        if ((tx.version == 2) && (tx.txComment)) {
+        if ( (tx.version == 2) && (tx.txComment) ) {
           response.txComment = tx.txComment.toString();
         }
         var inputs = tx.inputs;
         var item;
-        inputs.forEach(function (input) {
+        inputs.forEach(function(input) {
           var prevTxId = input.prevTxId.toString('hex');
           if (prevTxId == COINBASE) {
-            item = { received_from: 'coinbase' };
+            item = {received_from: 'coinbase'};
             response.inputs.push(item);
           }
           else {
             var address = inputAddress(input);
             var txPrevId = input.prevTxId.toString('hex');
             var n = input.outputIndex;
-            item = { addr: address, received_from: { tx: txPrevId, n: n } };
+            item = {addr: address, received_from: {tx: txPrevId, n: n}};
             response.inputs.push(item);
           }
         });
         var outputs = tx.outputs;
-        outputs.forEach(function (output) {
+        outputs.forEach(function(output) { 
           var address = outputAddress(output);
-          var amount = (output.satoshis) / SAT;
-          var script = output.script.toBuffer().toString('hex');
-          var item = { addr: address, amount: amount, script: script };
+          var amount = (output.satoshis)/SAT;
+          var script  = output.script.toBuffer().toString('hex');
+          var item = {addr: address, amount: amount, script: script};
           response.outputs.push(item);
         });
         return response;
@@ -550,8 +533,8 @@ function getTxInfo(rts, param) {
       txIndex++;
     }
   }
-  return { error: "unknown" };   // The code never should got here, but for a safety. 
-}
+  return {error: "unknown"};   // The code never should got here, but for a safety. 
+} 
 //////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////
@@ -564,7 +547,7 @@ function showAddressFirst(res, param) {
     return;
   }
   var query = { a: param };
-  database.search(dbBlocks, query, function (rts) {      // no need for a sort-search, blocks have been sorted in the database
+  database.search(dbBlocks, query, function(rts) {      // no need for a sort-search, blocks have been sorted in the database
     if (!rts) {
       res.end('{"error": "unknown address requested"}');
       return;
@@ -586,7 +569,7 @@ function showBalance(res, param) {
     return;
   }
   var query = { a: param };
-  database.searchMore(dbBlocks, query, function (rts) {
+  database.searchMore(dbBlocks, query, function(rts) {
     if (rts.length === 0) {
       res.end('{"error": "unknown address requested"}');
       return;
@@ -609,7 +592,7 @@ function showAddrInfo(res, param) {
     return;
   }
   var query = { a: param };
-  database.searchMore(dbBlocks, query, function (rts) {
+  database.searchMore(dbBlocks, query, function(rts) {
     if (rts.length === 0) {
       res.end('{"error": "unknown address requested"}');
       return;
@@ -633,7 +616,7 @@ function showUnspent(res, param) {
     return;
   }
   var query = { a: param };
-  database.searchMore(dbBlocks, query, function (rts) {
+  database.searchMore(dbBlocks, query, function(rts) {
     if (!rts) {
       res.end('{"error": "unknown address requested"}');
       return;
@@ -657,18 +640,18 @@ function showUnspent(res, param) {
 function findUnspent(blocks, param) {
   var txo = {};
   var unspent = [];
-  blocks.forEach(function (blockRecord) {
+  blocks.forEach( function(blockRecord) { 
     var block = Block.fromBuffer(blockRecord.d.buffer);
     var txs = block.transactions;
-    var i = 0;
+    var i=0;
     while (blockRecord.a[i] != param)
       i++;
     var b = blockRecord.b[i];
-    Object.keys(b).forEach(function (c) {
+    Object.keys(b).forEach( function(c) {
       var doid = DEOID(c);
       var tx = txs[doid.ti];
       if (doid.typ == 'o') {
-        var id = tx.hash + '_' + doid.oi;
+        var id =  tx.hash + '_' + doid.oi;
         txo[id] = {
           tx_hash: tx.hash,
           tx_output_n: doid.oi,
@@ -686,7 +669,7 @@ function findUnspent(blocks, param) {
       }
     });
   });
-  Object.values(txo).forEach(function (item) {
+  Object.values(txo).forEach( function(item) {
     if (item != false) {
       unspent.push(item);
     }
@@ -699,14 +682,14 @@ function findUnspent(blocks, param) {
 // API call for detailed list of input and output transactions
 // on an address.  
 //
-function showTxByAddr(res, param, pf, pt) {
+function showTxByAddr(res, param) {
   if (param == '') {
     res.end('{"error": "unknown address requested"}');
     return;
   }
   var query = { a: param };
   console.log('jsem tu a hledam v databazi...');
-  database.searchMore(dbBlocks, query, function (rts) {
+  database.searchMore(dbBlocks, query, function(rts) {
     if (!rts) {
       res.end('{"error": "unknown address requested"}');
       return;
@@ -715,20 +698,8 @@ function showTxByAddr(res, param, pf, pt) {
       res.end('{"error": "to many transactions -> wallet is protected "}');
       return;
     }
-    findAllTx(rts, param, function (response) {
-      response.reverse();
-      if ((pf == '') || (pt == ''))
-        res.end(JSON.stringify(response));
-      else {
-        var filtered = [];
-        var i = 0;
-        response.forEach(function (ri) {
-          if ((i >= pf) && (i <= pt))
-            filtered.push(ri);
-          i++;
-        });
-        res.end(JSON.stringify(filtered));
-      }
+    findAllTx(rts, param, function(response) {
+      res.end(JSON.stringify(response));
     });
   });
 }
@@ -742,56 +713,27 @@ function showTxByAddr(res, param, pf, pt) {
 //
 function findAllTx(blocks, param, callBack) {
   var txo = {};
-  blocks.forEach(function (blockRecord) {
+  blocks.forEach( function(blockRecord) { 
     var block = Block.fromBuffer(blockRecord.d.buffer);
     var txs = block.transactions;
-    var i = 0;
+    var i=0;
     while (blockRecord.a[i] != param)
       i++;
     var b = blockRecord.b[i];
-    Object.keys(b).forEach(function (c) {
+    Object.keys(b).forEach( function(c) {
       var toAddrs = [];
       var srcAddrs = [];
       var doid = DEOID(c);
       var tx = txs[doid.ti];
-      var blockInfo = {
+      var blockInfo = { 
         block_hash: blockRecord._id,
         block_height: blockRecord.i,
         block_time: block.header.time
       };
       var txInfo;
-
-      // transaction details on DEV request
-      var txDetails = {
-        inputs: [],
-        outputs: []
-      };
-      var item;
-      tx.inputs.forEach(function (input) {
-        var prevTxId = input.prevTxId.toString('hex');
-        if (prevTxId == COINBASE) {
-          item = { received_from: 'coinbase' };
-          txDetails.inputs.push(item);
-        }
-        else {
-          var address = inputAddress(input);
-          var txPrevId = input.prevTxId.toString('hex');
-          var n = input.outputIndex;
-          item = { addr: address, received_from: { tx: txPrevId, n: n } };
-          txDetails.inputs.push(item);
-        }
-      });
-      tx.outputs.forEach(function (output) {
-        var address = outputAddress(output);
-        var amount = (output.satoshis) / SAT;
-        var script = output.script.toBuffer().toString('hex');
-        var item = { addr: address, amount: amount, script: script };
-        txDetails.outputs.push(item);
-      });
-
       if (doid.typ == 'o') {
-        var id = tx.hash + '_' + doid.oi;
-        tx.inputs.forEach(function (input) {
+        var id =  tx.hash + '_' + doid.oi;
+        tx.inputs.forEach( function(input) {
           condPush(srcAddrs, inputAddress(input));
         });
         txInfo = {
@@ -799,13 +741,12 @@ function findAllTx(blocks, param, callBack) {
           tx_index: doid.ti,
           tx_comment: tx.txComment,
           tx_output_index: doid.oi,
-          confirmations: bestIndex - blockRecord.i,
-          details: txDetails
+          confirmations: bestIndex - blockRecord.i
         };
         var fromInfo = {
           source: srcAddrs,
           block: blockInfo,
-          transaction: txInfo
+          transaction: txInfo 
         };
         txo[id] = {
           value: b[c],
@@ -815,7 +756,7 @@ function findAllTx(blocks, param, callBack) {
         };
       }
       else {
-        tx.outputs.forEach(function (output) {
+        tx.outputs.forEach( function(output) {
           condPush(toAddrs, outputAddress(output));
         });
         var input = tx.inputs[doid.oi];
@@ -827,8 +768,7 @@ function findAllTx(blocks, param, callBack) {
           tx_index: doid.ti,
           tx_comment: tx.txComment,
           tx_input_index: doid.oi,
-          confirmations: bestIndex - blockRecord.i,
-          details: txDetails
+          confirmations: bestIndex - blockRecord.i
         };
         var spentInTx = {
           target: toAddrs,
@@ -859,11 +799,11 @@ function findAllTx(blocks, param, callBack) {
 function responseExplorer(res, commands) {
   var command = safeCommand(commands);
   var param = safeParam(commands);
-  res.writeHead(200, { 'Content-Type': 'text/html' });
-  res.write('<!DOCTYPE html><html><head><title>' + CONFIG.coinName + ' (' + CONFIG.ticker + ') Block Explorer</title>');
+  res.writeHead(200, {'Content-Type': 'text/html'});
+  res.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+CONFIG.coinName+' ('+CONFIG.ticker+') Block Explorer</title>');
   res.write('<style>a:link, a:visited {text-decoration: none; color: blue}</style>');
   res.write('</head><body>');
-  switch (command) {
+  switch(command) {
     case 'help':
       exHelp(res);
       break;
@@ -881,14 +821,14 @@ function responseExplorer(res, commands) {
 // the Block Explorer web page.
 //
 function exHeader(res) {
-  var title = '<h1><p align="center"><a href="main">Block Explorer for ' + CONFIG.coinName + '</a></p></h1>';
+  var title = '<h1><p align="center"><a href="main">Block Explorer for '+CONFIG.coinName+'</a></p></h1>';
   var searchBar = '<div align="center"> <form action="find" method="get">';
-  searchBar += '<input name="q" type="text" size="80" placeholder="block hash, index, transaction or address" />';
-  searchBar += '<input type="submit" value="Search" /></form></div><hr>';
-  var navBar = '<table width="100%"><tr><td width="20%"><B>Block height &nbsp;&nbsp;' + bestIndex + '</b></td>';
-  navBar += '<td width="60%">&nbsp;</td>';
-  navBar += '<td width="20%"><a href="/help">API documentation</a> &nbsp&nbsp&nbsp';
-  navBar += '<a href="/api"> API link</a></td></tr></table>';
+  searchBar+= '<input name="q" type="text" size="80" placeholder="block hash, index, transaction or address" />';
+  searchBar+= '<input type="submit" value="Search" /></form></div><hr>';
+  var navBar = '<table width="100%"><tr><td width="20%"><B>Block height &nbsp;&nbsp;'+bestIndex+'</b></td>';
+  navBar+= '<td width="60%">&nbsp;</td>';
+  navBar+= '<td width="20%"><a href="/help">API documentation</a> &nbsp&nbsp&nbsp';
+  navBar+= '<a href="/api"> API link</a></td></tr></table>';
   res.write(title);
   res.write(navBar);
   res.write(searchBar);
@@ -910,7 +850,7 @@ function exFooter(res) {
 // Block Explorer default page - tha last 50 blocks sumary 
 //
 function exMain(res) {
-  last50Blocks(function (blockList) {
+  last50Blocks( function(blockList) { 
     exHeader(res);
     res.write(lbInfo(blockList));
     exFooter(res);
@@ -924,8 +864,8 @@ function exMain(res) {
 // requests are asynchronous.  
 //
 function last50Blocks(callBack) {
-  var query = { i: { $gt: (bestIndex - 50) } };
-  database.searchMore(dbBlocks, query, function (rts) {
+  var query = {i: {$gt: (bestIndex-50)}};
+  database.searchMore(dbBlocks, query, function(rts) {
     callBack(rts);
   });
 }
@@ -937,29 +877,32 @@ function last50Blocks(callBack) {
 //
 function lbInfo(blockList) {
   var response = '<H3>Last Blocks </H1><HR><table width="100%" border="1">';
-  response += '<tr><td width="16%" align="center">Block Height</td><td width="16%" align="center">Age (min)</td>';
-  response += '<td width="16%" align="center">Transactions</td><td width="16%" align="center">Value Out (' + CONFIG.ticker + ')</td>';
-  response += '<td width="16%" align="center">Difficulty</td><td width="20%" align="center">Extracted by</td></tr>';
-  for (var i = (blockList.length - 1); i > 0; i--) {
+  response+= '<tr><td width="16%" align="center">Block Height</td><td width="16%" align="center">Age (min)</td>';
+  response+= '<td width="16%" align="center">Transactions</td><td width="16%" align="center">Value Out (' + CONFIG.ticker + ')</td>';
+  response+= '<td width="16%" align="center">Difficulty</td><td width="20%" align="center">Extracted by</td></tr>';
+  for (var i=(blockList.length-1); i>0; i--) {
     var block = Block.fromBuffer(blockList[i].d.buffer);
-    response += '<tr><td align="center"><a href="/find?q=' + blockList[i].i + '">' + blockList[i].i + '</a></td>';
+    response+= '<tr><td align="center"><a href="/find?q=' + blockList[i].i + '">' + blockList[i].i + '</a></td>';
     var time = block.header.time;
-    response += '<td align="center">' + calcAge(time) + '</td>';
-    response += '<td align="center">' + block.transactions.length;
-    response += '<font color="gray"> &nbsp;&nbsp;&nbsp;&nbsp;(';
-    response += parseInt(Math.round(blockList[i].d.buffer.length / 102.4)) / 10 + ' kB)</font></td>';
+    response+= '<td align="center">'+ calcAge(time) + '</td>';
+    response+= '<td align="center">'+ block.transactions.length;
+    response+= '<font color="gray"> &nbsp;&nbsp;&nbsp;&nbsp;(';
+    response+= parseInt(Math.round(blockList[i].d.buffer.length/102.4))/10 + ' kB)</font></td>';
     var valOut = 0;
-    block.transactions.forEach(function (tx) {
-      tx.outputs.forEach(function (output) {
+    block.transactions.forEach( function(tx) {
+      tx.outputs.forEach( function(output) {
         valOut += output.satoshis;
       });
     });
-    response += '<td align="center">' + valOut / SAT + '</td>';
-    response += '<td align="center">' + block.header.getDifficulty() + '</td>';
-    response += '<td align="center"><font size="2">' + outputAddress(block.transactions[0].outputs[0]) + '</font></td>';
-    response += '</tr>';
+    response+= '<td align="center">'+ valOut/SAT + '</td>';
+    response+= '<td align="center">'+ block.header.getDifficulty() + '</td>';
+    var miner = outputAddress(block.transactions[0].outputs[0]);
+    if (miner == "unknown")
+      var miner = outputAddress(block.transactions[0].outputs[1]);
+    response+= '<td align="center"><font size="2">'+ miner + '</font></td>';
+    response+= '</tr>';
   }
-  response += '</table>';
+  response+= '</table>';
   return response;
 }
 //////////////////////////////////////////////////////////////
@@ -973,8 +916,8 @@ function lbInfo(blockList) {
 function universalSearch(param, callBack) {
   if (param == '')
     param = bestIndex;
-  var query = { $or: [{ _id: param }, { i: Number(param) }, { t: param }, { a: param }] };
-  database.searchMore(dbBlocks, query, function (rts) {
+  var query = {$or: [ {_id: param}, {i: Number(param)}, {t: param}, {a: param} ] };
+  database.searchMore(dbBlocks, query, function(rts) {
     var response;
     if (rts.length == 0) {  // error
       response = 'Nothing found.';
@@ -997,8 +940,8 @@ function universalSearch(param, callBack) {
       return;
     }
     else {
-      var tx = rts[0].t;
-      for (var i = 0; i < tx.length; i++) {
+      var tx=rts[0].t;
+      for (var i=0; i<tx.length; i++) {
         if (tx[i] === param) { // transaction
           response = exTx(param, rts);
           callBack(response);
@@ -1018,7 +961,7 @@ function universalSearch(param, callBack) {
 // Block Explorer function for the search functionality. 
 //
 function exFind(res, param) {
-  universalSearch(param, function (response) {
+  universalSearch(param, function(response) {
     exHeader(res);
     res.write(response);
     exFooter(res);
@@ -1052,17 +995,17 @@ function exBalance(param, found) {
   var cnts = {};
   var totalReceived = 0;
   var balance = 0;
-  found.forEach(function (blockRecord) {
+  found.forEach( function(blockRecord) {
     var revBlockHex = null;
-    var i = 0;
+    var i=0;
     while (blockRecord.a[i] != param)
       i++;
     var b = blockRecord.b[i];
-    Object.keys(b).forEach(function (c) {
+    Object.keys(b).forEach( function(c) {
       var doid = DEOID(c);
       var txId = blockRecord.t[doid.ti];
       if (doid.typ == 'o') {
-        var id = txId + '_' + doid.oi;
+        var id =  txId + '_' + doid.oi;
         var received = b[c];
         txo[id] = received;
         totalReceived += received;
@@ -1074,7 +1017,7 @@ function exBalance(param, found) {
           revBlockHex = convHash(blockRecord.d.buffer);
         var doid2 = DEOID(b[c]);
         var pos = doid2.ti;
-        var prevTxId = revBlockHex.substring(pos, pos + 64);
+        var prevTxId = revBlockHex.substring(pos, pos+64);
         var idSpent = prevTxId + '_' + doid2.oi;
         balance -= txo[idSpent];
         txo[idSpent] = 0;
@@ -1086,17 +1029,17 @@ function exBalance(param, found) {
   var fbt = timeToISO(firstBlock.header.time);
   var fbi = found[0].i;
   var lbt = fbt;
-  var lbi = found[found.length - 1].i;
+  var lbi = found[found.length-1].i;
   if (found.length > 1) {
-    var lastBlock = Block.fromBuffer(found[found.length - 1].d.buffer);
+    var lastBlock = Block.fromBuffer(found[found.length-1].d.buffer);
     lbt = timeToISO(lastBlock.header.time);
   }
   console.log('memory db end');
-  return {
+  return { 
     address: param,
-    balance: balance / SAT,
-    received: totalReceived / SAT,
-    sent: (totalReceived - balance) / SAT,
+    balance: balance/SAT, 
+    received: totalReceived/SAT,
+    sent: (totalReceived-balance)/SAT,
     txIn: Object.values(cntr).length,
     txOut: Object.values(cnts).length,
     blocks: found.length,
@@ -1118,24 +1061,24 @@ function exBalance(param, found) {
 //
 function exAddress(rts) {
   var response = '<H3>Details of address ' + rts.address + '</H1><HR><table width="100%">';
-  response += '<tr><td width="25%">Address</td><td width="75%">' + rts.address + '</td></tr>';
-  response += '<tr><td>Balance (' + CONFIG.ticker + ') </td><td><b>' + rts.balance + '</b></td></tr>';
-  response += '<tr><td>Received (' + CONFIG.ticker + ') </td><td>' + rts.received;
-  response += '&nbsp;&nbsp;&nbsp;&nbsp; <font color="gray">in ' + rts.txIn + ' transactions</font></td></tr>';
-  response += '<tr><td>Sent (' + CONFIG.ticker + ') </td><td>' + rts.sent;
+  response+= '<tr><td width="25%">Address</td><td width="75%">' + rts.address + '</td></tr>';
+  response+= '<tr><td>Balance (' + CONFIG.ticker + ') </td><td><b>' + rts.balance + '</b></td></tr>';
+  response+= '<tr><td>Received (' + CONFIG.ticker + ') </td><td>' + rts.received;
+  response+= '&nbsp;&nbsp;&nbsp;&nbsp; <font color="gray">in ' + rts.txIn + ' transactions</font></td></tr>';
+  response+= '<tr><td>Sent (' + CONFIG.ticker + ') </td><td>' + rts.sent;
   if (rts.txOut > 0)
-    response += '&nbsp;&nbsp;&nbsp;&nbsp; <font color="gray">in ' + rts.txOut + ' transactions</font>';
-  response += '</td></tr>';
-  response += '<tr><td>Blocks Effected</td><td>' + rts.blocks + '</td></tr>';
-  response += '<tr><td>First Transaction</td><td>' + rts.firstTxTime;
-  response += '&nbsp;&nbsp;&nbsp;&nbsp;<font color="gray"> in block <a href="/find?q=';
-  response += rts.firstTxBlock + '">' + rts.firstTxBlock + '</a></font></td></tr>';
+    response+= '&nbsp;&nbsp;&nbsp;&nbsp; <font color="gray">in ' + rts.txOut + ' transactions</font>';
+  response+= '</td></tr>';
+  response+= '<tr><td>Blocks Effected</td><td>' + rts.blocks + '</td></tr>';
+  response+= '<tr><td>First Transaction</td><td>' + rts.firstTxTime;
+  response+= '&nbsp;&nbsp;&nbsp;&nbsp;<font color="gray"> in block <a href="/find?q=';
+  response+= rts.firstTxBlock + '">' + rts.firstTxBlock + '</a></font></td></tr>';
   if (rts.firstTxBlock != rts.lastTxBlock) {
-    response += '<tr><td>Last Transaction</td><td>' + rts.lastTxTime;
-    response += '&nbsp;&nbsp;&nbsp;&nbsp;<font color="gray"> in block <a href="/find?q=';
-    response += rts.lastTxBlock + '">' + rts.lastTxBlock + '</a></font></td></tr>';
+    response+= '<tr><td>Last Transaction</td><td>' + rts.lastTxTime;
+    response+= '&nbsp;&nbsp;&nbsp;&nbsp;<font color="gray"> in block <a href="/find?q=';
+    response+= rts.lastTxBlock + '">' + rts.lastTxBlock + '</a></font></td></tr>';
   }
-  response += '</table>';
+  response+= '</table>';
   return response;
 }
 //////////////////////////////////////////////////////////////
@@ -1150,24 +1093,24 @@ function exBlock(param, found) {
   var blockRecord = found[0];       // block should always be unicate
   var block = Block.fromBuffer(blockRecord.d.buffer);
   var response = '<H3>Details of block ' + param + '</H1><HR><table width="100%">';
-  response += '<tr><td width="25%">Hash</td><td width="75%">'
-  if (blockRecord.i > 0)
-    response += '<A href="find?q=' + (blockRecord.i - 1) + '"> <B>&lt;&lt;</B> </A>';
-  response += '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ' + blockRecord._id;
+  response+= '<tr><td width="25%">Hash</td><td width="75%">' 
+  if (blockRecord.i > 0) 
+    response+= '<A href="find?q='+ (blockRecord.i-1) + '"> <B>&lt;&lt;</B> </A>';
+  response+='&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ' + blockRecord._id;
   if (blockRecord.i < bestIndex)
-    response += ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <A href="find?q=' + (blockRecord.i + 1) + '"> <B>&gt;&gt;</B> </A>';
-  response += '</td></tr>';
-  response += '<tr><td>Height</td><td>' + blockRecord.i + '</td></tr>';
-  response += '<tr><td>Confirmations</td><td>' + (bestIndex + 1 - blockRecord.i) + '</td></tr>';
+    response+= ' &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <A href="find?q='+ (blockRecord.i+1) +'"> <B>&gt;&gt;</B> </A>';
+  response+= '</td></tr>';
+  response+= '<tr><td>Height</td><td>' + blockRecord.i + '</td></tr>';
+  response+= '<tr><td>Confirmations</td><td>' + (bestIndex + 1 - blockRecord.i) + '</td></tr>';
   var time = block.header.time;
   var newDate = new Date();
-  newDate.setTime(time * 1000);
+  newDate.setTime(time*1000);
   var dstr = newDate.toISOString().replace('T', ' ').substring(0, 19);
-  response += '<tr><td>Date/Time</td><td>' + dstr + '</td></tr>';
-  response += '<tr><td>Count of transactions</td><td>' + block.transactions.length;
-  response += '<font color="gray"> (size ' + parseInt(Math.round(blockRecord.d.buffer.length / 102.4)) / 10 + ' kB) </font></td></tr>';
+  response+= '<tr><td>Date/Time</td><td>'+ dstr + '</td></tr>';
+  response+= '<tr><td>Count of transactions</td><td>' + block.transactions.length;
+  response+= '<font color="gray"> (size ' + parseInt(Math.round(blockRecord.d.buffer.length/102.4))/10 + ' kB) </font></td></tr>';
   if (blockRecord.i === 0) {
-    response += '</table><font color="red">This is the genesis block.</font>'
+    response+= '</table><font color="red">This is the genesis block.</font>'
     return response;
   }
   var valueOut = 0;
@@ -1176,59 +1119,67 @@ function exBlock(param, found) {
   var txAmounts = [];
   var txFroms = [];
   var txTos = [];
+  var txComments = [];
   var i = 0;
-  block.transactions.forEach(function (tx) {
+  block.transactions.forEach( function(tx) {
     var txValue = 0;
     var txAmount = [];
     var txFrom = [];
     var txTo = [];
-    tx.inputs.forEach(function (input) {
-      condPush(txFrom, inputAddress(input));
+    tx.inputs.forEach( function(input) {
+      condPush(txFrom, inputAddress(input) );
     });
     txFroms.push(txFrom);
     console.log(tx.outputs[0]);
-    tx.outputs.forEach(function (output) {
+    tx.outputs.forEach( function(output) {
       txValue += output.satoshis;
       txAmount.push(output.satoshis);
       txTo.push(outputAddress(output));
     });
+    var txMessage = "";
+    if (tx.version == 2)
+      txMessage = tx.txComment;
     txHashes.push(tx.hash);
     txTos.push(txTo);
     valuesOut.push(txValue);
     txAmounts.push(txAmount);
+    txComments.push(txMessage);
     valueOut += txValue;
     i++;
   });
-  response += '<tr><td>Value Out (' + CONFIG.ticker + ')</td><td>' + valueOut / SAT + '</td></tr>';
-  response += '<tr><td>Difficulty</td><td>' + block.header.getDifficulty() + '</td></tr>';
-  response += '<tr><td>Block Reward (' + CONFIG.ticker + ')</td><td>' + valuesOut[0] / SAT + '</td></tr></table>';
-  response += '<br><br>Transactions<br><font size="2"><table width="100%" border="1">';
-  response += '<tr><td width="2%" align="center">#</td><td width="38%" align="center">Hash</td>';
-  response += '<td width="10%" align="center">Value Out (' + CONFIG.ticker + ')</td><td width="20%" align="center">From</td>';
-  response += '<td width="20%" align="center">To</td><td width="10%" align="center">Amount (' + CONFIG.ticker + ')</td</tr>';
+  response+= '<tr><td>Value Out (' + CONFIG.ticker + ')</td><td>' + valueOut/SAT + '</td></tr>';
+  response+= '<tr><td>Difficulty</td><td>' + block.header.getDifficulty() + '</td></tr>';
+  response+= '<tr><td>Block Reward (' + CONFIG.ticker + ')</td><td>' + valuesOut[0]/SAT + '</td></tr></table>';
+  response+= '<br><br>Transactions<br><font size="2"><table width="100%" border="1">';
+  response+= '<tr><td width="2%" align="center">#</td><td width="38%" align="center">Hash</td>';
+  response+= '<td width="10%" align="center">Value Out (' + CONFIG.ticker + ')</td><td width="20%" align="center">From</td>';
+  response+= '<td width="20%" align="center">To</td><td width="10%" align="center">Amount (' + CONFIG.ticker + ')</td</tr>';
   i = 0;
-  txHashes.forEach(function (tx) {
-    response += '<tr><td align="center">' + i + '</td><td align="center"><a href=/find?q=' + tx + '>';
-    response += tx + '</a></td><td align="center">';
-    response += valuesOut[i] / SAT + '</td><td align="center">';
-    txFroms[i].forEach(function (from) {
+  txHashes.forEach( function(tx) {
+    response+= '<tr><td align="center">' + i + '</td><td align="center"><a href=/find?q='+tx+'>';
+    response+= tx + '</a>';
+    if (txComments[i].length > 0)
+      response+= '<br> <font color="red">'+txComments[i]+'</font>';
+    response+='</td><td align="center">';
+    response+= valuesOut[i]/SAT + '</td><td align="center">';
+    txFroms[i].forEach( function(from) {
       if (from === 'coinbase')
-        response += from + '<br>';
+        response+= from + '<br>';
       else
-        response += '<a href="/find?q=' + from + '">' + from + '</a><br>';
+        response+= '<a href="/find?q=' + from + '">' + from + '</a><br>';
     });
-    response += '</td><td align="center">';
-    txTos[i].forEach(function (to) {
-      response += '<a href="/find?q=' + to + '">' + to + '</a><br>';
+    response+= '</td><td align="center">';
+    txTos[i].forEach( function(to) {
+      response+= '<a href="/find?q=' + to + '">' + to + '</a><br>';
     });
-    response += '</td><td align="center">';
-    block.transactions[i].outputs.forEach(function (output) {
-      response += output.satoshis / SAT + '<br>';
+    response+= '</td><td align="center">';
+    block.transactions[i].outputs.forEach( function(output) {
+      response+= output.satoshis/SAT + '<br>';
     });
-    response += '</td></tr>';
+    response+= '</td></tr>';
     i++;
   });
-  response += '</table></font>';
+  response+= '</table></font>';
   return response;
 }
 //////////////////////////////////////////////////////////////
@@ -1247,44 +1198,44 @@ function exTx(param, found) {
   var i = 0;
   while (txs[i].hash != param)
     i++;
-  response += '<tr><td width="25%">Hash (txid)</td><td width="75%">' + txs[i].hash + '</td></tr>';
-  response += '<tr><td>Block Height</td><td><a href="/find?q=' + blockRecord.i + '">';
-  response += blockRecord.i + '</a> (' + (bestIndex + 1 - blockRecord.i) + ' confirmations)</td></tr>';
-  response += '<tr><td>Transaction Index</td><td>' + i + '</td></tr>';
-  response += '<tr><td>Count of Inputs</td><td>' + txs[i].inputs.length + '</td></tr>';
-  response += '<tr><td>Count of Outputs</td><td>' + txs[i].outputs.length + '</td></tr>';
-  response += '<tr><td>Block Time</td><td>' + timeToISO(block.header.time) + '</td></tr>';
+  response+= '<tr><td width="25%">Hash (txid)</td><td width="75%">' + txs[i].hash + '</td></tr>';
+  response+= '<tr><td>Block Height</td><td><a href="/find?q=' + blockRecord.i + '">';
+  response+= blockRecord.i + '</a> (' + (bestIndex+1-blockRecord.i) + ' confirmations)</td></tr>' ;
+  response+= '<tr><td>Transaction Index</td><td>' + i + '</td></tr>';
+  response+= '<tr><td>Count of Inputs</td><td>' + txs[i].inputs.length + '</td></tr>';
+  response+= '<tr><td>Count of Outputs</td><td>' + txs[i].outputs.length + '</td></tr>';
+  if ((txs[i].version == 2) && (txs[i].txComment.length > 0))
+    response+= '<tr><td><font color="red">Transaction message</font></td><td>' + txs[i].txComment + '</td></tr>';
+  response+= '<tr><td>Block Time</td><td>'+ timeToISO(block.header.time) + '</td></tr>';
   if (blockRecord.i === 0) {
-    response += '</table><font color="red">This is a pseudo-transaction in the genesis block.</font>'
+    response+= '</table><font color="red">This is a pseudo-transaction in the genesis block.</font>'
     return response;
   }
-  response += '</table><table width="100%" border="1">';
-  response += '<tr><td width="45%" align="center">Input Addresses</td>';
-  response += '<td width="45%" align="center">Output Addresses</td>';
-  response += '<td width="10%" align="center">Amount (' + CONFIG.ticker + ')</td></tr>';
-  response += '<tr><td align="center">';
+  response+= '</table><table width="100%" border="1">';
+  response+= '<tr><td width="45%" align="center">Input Addresses</td>';
+  response+= '<td width="45%" align="center">Output Addresses</td>';
+  response+= '<td width="10%" align="center">Amount (' + CONFIG.ticker + ')</td></tr>';
+  response+= '<tr><td align="center">';
   var ins = [];
-  txs[i].inputs.forEach(function (input) {
+  txs[i].inputs.forEach( function(input) {
     condPush(ins, inputAddress(input));
   });
-  ins.forEach(function (ia) {
-    response += (ia === 'coinbase') ? ia + '<br>' : '<a href="/find?q=' + ia + '">' + ia + '</a><br>';
+  ins.forEach( function(ia) {
+    response+= (ia === 'coinbase') ? ia + '<br>' : '<a href="/find?q=' + ia + '">' + ia + '</a><br>';
   });
-  response += '</td><td align="center">';
-  txs[i].outputs.forEach(function (output) {
-    response += '<a href="/find?q=' + outputAddress(output) + '">' + outputAddress(output) + '</a><br>';
+  response+= '</td><td align="center">';
+  txs[i].outputs.forEach( function(output) {
+    response+= '<a href="/find?q=' + outputAddress(output) + '">' + outputAddress(output) + '</a><br>';
   });
-  response += '</td><td align="center">';
+  response+= '</td><td align="center">';
   var sum = 0;
-  txs[i].outputs.forEach(function (output) {
-    response += output.satoshis / SAT + '<br>';
+  txs[i].outputs.forEach( function(output) {
+    response+= output.satoshis/SAT + '<br>';
     sum += output.satoshis;
   });
-  response += '</td></tr>';
-  response += '<tr><td></td><td align="right"><b>Total output &nbsp;&nbsp;</b></td><td align="center"><b>' + sum / SAT + '</b></td></tr>';
-  response += '</table>';
+  response+= '</td></tr>';
+  response+= '<tr><td></td><td align="right"><b>Total output &nbsp;&nbsp;</b></td><td align="center"><b>'+sum/SAT+'</b></td></tr>';
+  response+= '</table>';
   return response;
 }
 //////////////////////////////////////////////////////////////
-
-

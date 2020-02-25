@@ -337,6 +337,7 @@ function decodeTransactions(bbRec) {
       n++;
     });
     n = 0;
+  try{
     tx.outputs.forEach( function(output) {
       var address = outputAddress(output);
       if (address != 'false') {
@@ -344,6 +345,9 @@ function decodeTransactions(bbRec) {
       }
       n++;
     });
+  } catch(err) {
+    console.log("unknown transaction");
+  }
     ti++;
   });
   bbRec.t = t;
@@ -373,6 +377,15 @@ pool.on('peerheaders', function(peer, message) {
 pool.on('peerblock', function(peer, message) {
 //  console.log('peerblock', bc);
   sortBlocks(message.block);
+});
+
+//////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////
+// Pool event to ignore sendheaders message
+//
+pool.on('peersendheaders', function(peer, message) {
+  console.log('peersendheaders');
 });
 
 //////////////////////////////////////////////////////////////
