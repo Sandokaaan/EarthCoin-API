@@ -197,6 +197,8 @@ function responseAPIrequest(res, commands) {
   var nParams = commands.length;
   var command = (nParams == 0) ? 'help' : safeString(commands[0]);
   var param = (nParams > 1) ? safeString(commands[1]) : '';
+  var pfrom = (nParams > 2) ? safeString(commands[2]) : '';
+  var pto = (nParams > 3) ? safeString(commands[3]) : '';
 console.log(command, param);
   switch(command) {
     case 'help':
@@ -230,7 +232,7 @@ console.log(command, param);
       showUnspent(res, param);
       break;
     case 'txbyaddr':
-      showTxByAddr(res, param);
+      showTxByAddr(res, param, pfrom, pto);
       break;
     case 'getdifficulty':
     case 'difficulty':
@@ -680,9 +682,9 @@ function findUnspent(blocks, param) {
 
 //////////////////////////////////////////////////////////////
 // API call for detailed list of input and output transactions
-// on an address.  
+// on an address.
 //
-function showTxByAddr(res, param) {
+function showTxByAddr(res, param, pf, pt) {
   if (param == '') {
     res.end('{"error": "unknown address requested"}');
     return;
@@ -699,7 +701,18 @@ function showTxByAddr(res, param) {
       return;
     }
     findAllTx(rts, param, function(response) {
-      res.end(JSON.stringify(response));
+      if ((pf == '') || (pt == ''))
+        res.end(JSON.stringify(response));
+      else {
+        var filtered = [];
+        var i=0;
+        response.forEach( function(ri) {
+          i++;
+          if ((i>=pf) && (i<=pt))
+            filtered.push(ri);
+        });
+        res.end(JSON.stringify(filtered));
+      }
     });
   });
 }
