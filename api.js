@@ -719,12 +719,52 @@ function showTxByAddr(res, param, pf, pt) {
 //////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////
+// Prepare an array of all raw transactions in a list of blocks
+//
+function findRawTx(blocks) {
+  var rawtxs = [];
+  blocks.forEach( function(blockRecord) {
+    var block = Block.fromBuffer(blockRecord.d.buffer);
+    var txs = block.transactions;
+    txs.forEach( function(tx) {
+      var outputs = [];
+      tx.outputs.forEach( function(output) {
+	output = {
+	  address: outputAddress(output),
+	  satoshis: output.satoshis,
+	  script: output.script.toBuffer().toString('hex')
+	};
+	outputs.push(output);
+      });
+      var inputs = [];
+      tx.inputs.forEach( function(input) {
+	input = {
+	  address: inputAddress(input),
+	};
+	inputs.push(input);
+      });
+
+      var wtx = { 
+	inputs: inputs,
+        outputs: outputs
+      };
+      rawtxs[tx.hash]=wtx;
+    });
+  });
+  return rawtxs;
+}
+
+//////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////
 // Prepare a list (in the JSON format) of transactions on an 
 // address for the API function txbyaddr. 
 // Dev note: Here the call-back style for return values was
 // needless - replace with a single return? 
 //
 function findAllTx(blocks, param, callBack) {
+  var rawtxs = findRawTx(blocks);
   var txo = {};
   blocks.forEach( function(blockRecord) { 
     var block = Block.fromBuffer(blockRecord.d.buffer);
@@ -734,8 +774,6 @@ function findAllTx(blocks, param, callBack) {
       i++;
     var b = blockRecord.b[i];
     Object.keys(b).forEach( function(c) {
-      var toAddrs = [];
-      var srcAddrs = [];
       var doid = DEOID(c);
       var tx = txs[doid.ti];
       var blockInfo = { 
@@ -746,18 +784,17 @@ function findAllTx(blocks, param, callBack) {
       var txInfo;
       if (doid.typ == 'o') {
         var id =  tx.hash + '_' + doid.oi;
-        tx.inputs.forEach( function(input) {
-          condPush(srcAddrs, inputAddress(input));
-        });
         txInfo = {
           tx_hash: tx.hash,
           tx_index: doid.ti,
-          tx_comment: tx.txComment,
           tx_output_index: doid.oi,
-          confirmations: bestIndex - blockRecord.i
+          confirmations: bestIndex - blockRecord.i,
+	  inputs: rawtxs[tx.hash].inputs,
+	  outputs: rawtxs[tx.hash].outputs
         };
+	if (tx.hasOwnProperty('txComment'))
+           txInfo['txComment'] = tx.txComment.toString();
         var fromInfo = {
-          source: srcAddrs,
           block: blockInfo,
           transaction: txInfo 
         };
@@ -765,13 +802,10 @@ function findAllTx(blocks, param, callBack) {
           value: b[c],
           script: tx.outputs[doid.oi].script.toBuffer().toString('hex'),
           spent: false,
-          received_from: fromInfo
+          received: fromInfo
         };
       }
       else {
-        tx.outputs.forEach( function(output) {
-          condPush(toAddrs, outputAddress(output));
-        });
         var input = tx.inputs[doid.oi];
         var prevTxId = input.prevTxId.toString('hex');
         var outIndex = input.outputIndex;
@@ -779,17 +813,19 @@ function findAllTx(blocks, param, callBack) {
         txInfo = {
           tx_hash: tx.hash,
           tx_index: doid.ti,
-          tx_comment: tx.txComment,
           tx_input_index: doid.oi,
-          confirmations: bestIndex - blockRecord.i
+          confirmations: bestIndex - blockRecord.i,
+	  inputs: rawtxs[tx.hash].inputs,
+	  outputs: rawtxs[tx.hash].outputs,
         };
+	if (tx.hasOwnProperty('txComment'))
+           txInfo['txComment'] = tx.txComment.toString();
         var spentInTx = {
-          target: toAddrs,
           block: blockInfo,
           transaction: txInfo
         };
         txo[idSpent].spent = true;
-        txo[idSpent].sent_to = spentInTx;
+        txo[idSpent].sent = spentInTx;
       }
     });
   });
@@ -1149,8 +1185,8 @@ function exBlock(param, found) {
       txAmount.push(output.satoshis);
       txTo.push(outputAddress(output));
     });
-    var txMessage = "";
-    if (tx.version == 2)
+    var txMessage;
+    if (tx.version == 2 && tx.hasOwnProperty('txComment'))
       txMessage = tx.txComment;
     txHashes.push(tx.hash);
     txTos.push(txTo);
@@ -1171,7 +1207,7 @@ function exBlock(param, found) {
   txHashes.forEach( function(tx) {
     response+= '<tr><td align="center">' + i + '</td><td align="center"><a href=/find?q='+tx+'>';
     response+= tx + '</a>';
-    if (txComments[i].length > 0)
+    if (txComments[i])
       response+= '<br> <font color="red">'+txComments[i]+'</font>';
     response+='</td><td align="center">';
     response+= valuesOut[i]/SAT + '</td><td align="center">';
@@ -1217,7 +1253,7 @@ function exTx(param, found) {
   response+= '<tr><td>Transaction Index</td><td>' + i + '</td></tr>';
   response+= '<tr><td>Count of Inputs</td><td>' + txs[i].inputs.length + '</td></tr>';
   response+= '<tr><td>Count of Outputs</td><td>' + txs[i].outputs.length + '</td></tr>';
-  if ((txs[i].version == 2) && (txs[i].txComment.length > 0))
+  if ((txs[i].version == 2) && (txs[i].hasOwnProperty('txComment')))
     response+= '<tr><td><font color="red">Transaction message</font></td><td>' + txs[i].txComment + '</td></tr>';
   response+= '<tr><td>Block Time</td><td>'+ timeToISO(block.header.time) + '</td></tr>';
   if (blockRecord.i === 0) {
