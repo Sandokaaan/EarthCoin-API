@@ -701,18 +701,23 @@ function showTxByAddr(res, param, pf, pt) {
       return;
     }
     findAllTx(rts, param, function(response) {
-      if ((pf == '') || (pt == ''))
-        res.end(JSON.stringify(response));
-      else {
-        var filtered = [];
-        var i=0;
-        response.forEach( function(ri) {
-          i++;
-          if ((i>=pf) && (i<=pt))
-            filtered.push(ri);
-        });
-        res.end(JSON.stringify(filtered));
+      var n = response.length;
+      var last = parseInt(pt);
+      if (Number.isNaN(last) || last>=n)
+        last = n-1;
+      var first = parseInt(pf);
+      if (Number.isNaN(first) || first<0)
+        first = 0;
+//      console.log('pocet', n, ' dolni: ', first,  'horni:', last);
+      var filtered = [];
+      var i = first;
+      while ( i <= last) {
+        var revmap = n-i-1;
+        i++;
+//        console.log('pushing:', revmap);
+        filtered.push(response[revmap]);
       }
+      res.end(JSON.stringify(filtered));
     });
   });
 }
