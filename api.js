@@ -281,7 +281,7 @@ function showHelp(res) {
       balance: "the same as getbalance",
       utxo: "return unspent transaction outputs of ADDRESS: http://url:port/api/utxo/ADDRESS",
       unspent: "the same as utxo",
-      txbyaddr: "return a list of all transactions on ADDRESS: http://url:port/api/txbyaddress/ADDRESS"
+      txbyaddr: "return a list of all transactions on ADDRESS: http://url:port/api/txbyaddress/ADDRESS or optionally with paging: http://url:port/api/txbyaddress/ADDRESS/START_INDEX/END_INDEX"
     }
   };
   res.end(JSON.stringify(rts));
@@ -504,7 +504,11 @@ function getTxInfo(rts, param) {
           outputs: []
         };
         if ( (tx.version == 2) && (tx.txComment) ) {
-          response.txComment = tx.txComment.toString();
+	    var txComposedComment = getSplitTxComment(tx.txComment.toString());
+	    if (txComposedComment.txComment.length > 0)
+		response.txComment = txComposedComment.txComment;
+	    if (txComposedComment.IPFS_ID.length > 0)
+		response.IPFS_ID = txComposedComment.IPFS_ID;
         }
         var inputs = tx.inputs;
         var item;
@@ -763,6 +767,29 @@ function findRawTx(blocks) {
 
 
 //////////////////////////////////////////////////////////////
+// Extract txComment and IPFS_ID from composedComment
+//
+function getSplitTxComment(txRawComment) {
+    var nlen = txRawComment.length;
+    var npos = txRawComment.indexOf("\n");
+    var txComment = '';
+    var IPFS_ID = '';
+    if (npos == -1)
+        txComment = txRawComment;
+    else {
+        IPFS_ID = txRawComment.substring(0, npos);
+        if ((npos+1) < nlen)
+            npos++;
+        txComment = (npos<nlen) ? txRawComment.substring(npos, nlen) : "";
+    }
+    var rts = {};
+    rts['txComment'] = txComment;
+    rts['IPFS_ID'] = IPFS_ID;
+    return rts;
+}
+
+
+//////////////////////////////////////////////////////////////
 // Prepare a list (in the JSON format) of transactions on an 
 // address for the API function txbyaddr. 
 // Dev note: Here the call-back style for return values was
@@ -823,8 +850,13 @@ function findAllTx(blocks, param, callBack) {
 	  inputs: rawtxs[tx.hash].inputs,
 	  outputs: rawtxs[tx.hash].outputs,
         };
-	if (tx.hasOwnProperty('txComment'))
-           txInfo['txComment'] = tx.txComment.toString();
+	if (tx.hasOwnProperty('txComment')) {
+	    var txComposedComment = getSplitTxComment(tx.txComment.toString());
+	    if (txComposedComment.txComment.length > 0)
+		txInfo['txComment'] = txComposedComment.txComment;
+	    if (txComposedComment.IPFS_ID.length > 0)
+		txInfo['IPFS_ID'] = txComposedComment.IPFS_ID;
+	}
         var spentInTx = {
           block: blockInfo,
           transaction: txInfo
@@ -1212,8 +1244,16 @@ function exBlock(param, found) {
   txHashes.forEach( function(tx) {
     response+= '<tr><td align="center">' + i + '</td><td align="center"><a href=/find?q='+tx+'>';
     response+= tx + '</a>';
-    if (txComments[i])
-      response+= '<br> <font color="red">'+txComments[i]+'</font>';
+    if (txComments[i]) {
+	var txComposedComment = getSplitTxComment(txComments[i].toString());
+	if (txComposedComment.txComment.length > 0)
+    	    response+= '<br> <font color="red">' + txComposedComment.txComment + '</font>';
+        if (txComposedComment.IPFS_ID.length > 0) {
+            response += ' <form action="https://ipfs.io/ipfs/' + txComposedComment.IPFS_ID + '">';
+            response += ' <input style="border-radius: 12px;" type="submit" formtarget="_blank"'; 
+            response += ' value="View IPFS_ID" /> </form>';
+        }
+    }
     response+='</td><td align="center">';
     response+= valuesOut[i]/SAT + '</td><td align="center">';
     txFroms[i].forEach( function(from) {
@@ -1258,8 +1298,15 @@ function exTx(param, found) {
   response+= '<tr><td>Transaction Index</td><td>' + i + '</td></tr>';
   response+= '<tr><td>Count of Inputs</td><td>' + txs[i].inputs.length + '</td></tr>';
   response+= '<tr><td>Count of Outputs</td><td>' + txs[i].outputs.length + '</td></tr>';
-  if ((txs[i].version == 2) && (txs[i].hasOwnProperty('txComment')))
-    response+= '<tr><td><font color="red">Transaction message</font></td><td>' + txs[i].txComment + '</td></tr>';
+  if ((txs[i].version == 2) && (txs[i].hasOwnProperty('txComment'))) {
+	var txComposedComment = getSplitTxComment(txs[i].txComment.toString());
+        if (txComposedComment.txComment.length > 0)
+	    response+= '<tr><td><font color="red">Transaction message</font></td><td>' + txComposedComment.txComment + '</td></tr>';
+        if (txComposedComment.IPFS_ID.length > 0) {
+            response+= '<tr><td><font color="red">IPFS_ID</font></td><td><a href="https://ipfs.io/ipfs/' + txComposedComment.IPFS_ID;
+	    response+= '" target="_blank">' + txComposedComment.IPFS_ID + '</a></td></tr>';
+	}
+  }
   response+= '<tr><td>Block Time</td><td>'+ timeToISO(block.header.time) + '</td></tr>';
   if (blockRecord.i === 0) {
     response+= '</table><font color="red">This is a pseudo-transaction in the genesis block.</font>'
