@@ -7,7 +7,7 @@
     "alias": "eacnet",
     "pubkeyhash": 93, /* 0x5d in hexadecimal */
     "privatekey": 221, /* 0xdd in hexadecimal */
-    "scripthash": 5,
+    "scripthash": 33,  /* script addresses start with E */
     "xpubkey": 76067358, /* 0x0488b21e in hexadecimal */
     "xprivkey": 76066276, /* 0x0488ade4 in hexadecimal */
     "networkMagic": 3235639805, /* 0xc0dbf1fd in hexadecimal */
